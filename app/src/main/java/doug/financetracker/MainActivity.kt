@@ -6,20 +6,32 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import doug.financetracker.ui.navigation.Routes
+import doug.financetracker.ui.screens.addtransaction.AddTransactionScreen
+import doug.financetracker.ui.screens.pending.PendingScreen
+import doug.financetracker.ui.screens.settings.SettingsScreen
+import doug.financetracker.ui.screens.transactions.TransactionsScreen
 import doug.financetracker.ui.theme.FinanceTrackerTheme
 
 class MainActivity : ComponentActivity() {
@@ -34,58 +46,81 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@PreviewScreenSizes
+private enum class TopDestination(
+    val label: String,
+    val icon: ImageVector,
+    val route: String
+) {
+    TRANSACTIONS("Transactions", Icons.Filled.Home, Routes.TRANSACTIONS),
+    PENDING("Pending", Icons.Filled.Inbox, Routes.PENDING),
+    ADD("Add", Icons.Filled.Add, "add_transaction?editId=-1"),
+    SETTINGS("Settings", Icons.Filled.Settings, Routes.SETTINGS)
+}
+
 @Composable
 fun FinanceTrackerRoot() {
-    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
+    val navController = rememberNavController()
+    val backStack by navController.currentBackStackEntryAsState()
+    val currentDestination = backStack?.destination
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {
-            AppDestinations.entries.forEach {
+            TopDestination.entries.forEach { dest ->
+                val selected = currentDestination?.hierarchy?.any {
+                    it.route?.substringBefore("?") == dest.route.substringBefore("?")
+                } == true
                 item(
-                    icon = {
-                        Icon(
-                            painterResource(it.icon),
-                            contentDescription = it.label
-                        )
-                    },
-                    label = { Text(it.label) },
-                    selected = it == currentDestination,
-                    onClick = { currentDestination = it }
+                    icon = { Icon(dest.icon, contentDescription = dest.label) },
+                    label = { Text(dest.label) },
+                    selected = selected,
+                    onClick = {
+                        navController.navigate(dest.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
                 )
             }
         }
     ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            Greeting(
-                name = "Android",
+            NavHost(
+                navController = navController,
+                startDestination = Routes.TRANSACTIONS,
                 modifier = Modifier.padding(innerPadding)
-            )
+            ) {
+                composable(Routes.TRANSACTIONS) {
+                    TransactionsScreen(
+                        onAdd = { navController.navigate(Routes.addTransaction()) },
+                        onEdit = { id -> navController.navigate(Routes.addTransaction(id)) }
+                    )
+                }
+                composable(Routes.PENDING) {
+                    PendingScreen()
+                }
+                composable(
+                    route = Routes.ADD_TRANSACTION,
+                    arguments = listOf(navArgument("editId") { type = NavType.LongType; defaultValue = -1L })
+                ) { entry ->
+                    val editId = entry.arguments?.getLong("editId")?.takeIf { it >= 0 }
+                    AddTransactionScreen(
+                        editId = editId,
+                        onDone = {
+                            navController.popBackStack(
+                                Routes.TRANSACTIONS,
+                                inclusive = false,
+                                saveState = false
+                            )
+                        }
+                    )
+                }
+                composable(Routes.SETTINGS) {
+                    SettingsScreen()
+                }
+            }
         }
-    }
-}
-
-enum class AppDestinations(
-    val label: String,
-    val icon: Int,
-) {
-    HOME("Home", R.drawable.ic_home),
-    FAVORITES("Favorites", R.drawable.ic_favorite),
-    PROFILE("Profile", R.drawable.ic_account_box),
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    FinanceTrackerTheme {
-        Greeting("Android")
     }
 }
