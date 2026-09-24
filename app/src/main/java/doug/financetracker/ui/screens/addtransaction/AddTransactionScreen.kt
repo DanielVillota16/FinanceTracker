@@ -56,14 +56,18 @@ import doug.financetracker.util.formatTime
 @Composable
 fun AddTransactionScreen(
     editId: Long?,
+    pendingId: Long?,
     onDone: () -> Unit
 ) {
     val context = LocalContext.current
     val vm: AddTransactionViewModel = viewModel(
-        key = "add_${editId ?: -1}",
+        key = "add_${editId ?: -1}_${pendingId ?: -1}",
         factory = vmFactory {
             val c = appContainer(context)
-            AddTransactionViewModel(editId, c.transactionRepository, c.tagRepository, c.accountRepository)
+            AddTransactionViewModel(
+                editId, pendingId, c.transactionRepository, c.tagRepository,
+                c.accountRepository, c.pendingReviewRepository
+            )
         }
     )
     val s by vm.state.collectAsStateWithLifecycle()

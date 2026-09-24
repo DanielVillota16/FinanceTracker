@@ -7,7 +7,9 @@ import doug.financetracker.domain.model.Account
 import doug.financetracker.domain.model.Tag
 import doug.financetracker.domain.model.Transaction
 import doug.financetracker.domain.model.TransactionType
+import doug.financetracker.domain.parser.TransactionKind
 import doug.financetracker.domain.repository.AccountRepository
+import doug.financetracker.domain.repository.PendingReviewRepository
 import doug.financetracker.domain.repository.TagRepository
 import doug.financetracker.domain.repository.TransactionRepository
 import doug.financetracker.util.combineDateAndTime
@@ -47,9 +49,11 @@ data class AddTransactionUiState(
 
 class AddTransactionViewModel(
     private val editId: Long?,
+    private val pendingId: Long?,
     private val transactions: TransactionRepository,
     private val tagRepository: TagRepository,
-    accountRepository: AccountRepository
+    private val accountRepository: AccountRepository,
+    private val pendingRepo: PendingReviewRepository
 ) : ViewModel() {
 
     private val formOnly = MutableStateFlow(
@@ -102,7 +106,56 @@ class AddTransactionViewModel(
                     )
                 }
             }
+        } else if (pendingId != null && pendingId >= 0) {
+            viewModelScope.launch {
+                val item = pendingRepo.getItem(pendingId) ?: return@launch
+                val parsed = item.parsed
+                val accounts = accountRepository.getAll()
+                val dateTime = parsed.timestampMillis
+                    ?: item.sourceEvent.eventTime
+                    ?: item.sourceEvent.receivedAt
+                formOnly.update {
+                    it.copy(
+                        type = when (parsed.transactionKind) {
+                            TransactionKind.EXPENSE -> TransactionType.EXPENSE
+                            TransactionKind.INCOME -> TransactionType.INCOME
+                            TransactionKind.TRANSFER -> TransactionType.TRANSFER
+                            TransactionKind.UNKNOWN -> it.type
+                        },
+                        amountText = parsed.amountPesos?.toString().orEmpty(),
+                        dateMillis = dateTime,
+                        hour = hourOf(dateTime),
+                        minute = minuteOf(dateTime),
+                        counterparty = parsed.counterparty.orEmpty(),
+                        sourceAccountId = resolveHint(parsed.sourceAccountHint, accounts)?.id
+                            ?: it.sourceAccountId,
+                        destinationAccountId = resolveHint(parsed.destinationAccountHint, accounts)?.id
+                            ?: it.destinationAccountId
+                    )
+                }
+            }
         }
+    }
+
+    private fun resolveHint(
+        hint: doug.financetracker.domain.parser.AccountHint?,
+        accounts: List<Account>
+    ): Account? {
+        if (hint == null) return null
+        if (hint.isCash) {
+            return accounts.firstOrNull { it.accountType == "CASH" }
+                ?: accounts.firstOrNull { it.name.equals("Cash", ignoreCase = true) }
+        }
+        if (hint.lastDigits.isNotEmpty()) {
+            accounts.firstOrNull { it.identifierSuffix == hint.lastDigits }?.let { return it }
+        }
+        hint.label?.takeIf { it.isNotBlank() }?.let { label ->
+            accounts.firstOrNull {
+                it.institution.equals(label, ignoreCase = true) ||
+                    it.name.equals(label, ignoreCase = true)
+            }?.let { return it }
+        }
+        return null
     }
 
     fun onTypeChange(type: TransactionType) {
@@ -184,7 +237,7 @@ class AddTransactionViewModel(
                         )
                     )
                 } else {
-                    transactions.create(
+                    val newId = transactions.create(
                         Transaction(
                             type = s.type,
                             amount = amount,
@@ -196,6 +249,10 @@ class AddTransactionViewModel(
                             tagIds = tagIds
                         )
                     )
+                    // Saving from a pending item converts it: link evidence, leave queue.
+                    if (pendingId != null && pendingId >= 0) {
+                        pendingRepo.confirm(pendingId, newId)
+                    }
                 }
                 formOnly.update { it.copy(isSaving = false, saved = true) }
             } catch (e: Exception) {

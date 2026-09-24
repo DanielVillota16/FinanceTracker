@@ -14,6 +14,9 @@ class RoomAccountRepository(
     override fun observeAccounts(): Flow<List<Account>> =
         dao.observeAll().map { list -> list.map { it.toDomain() } }
 
+    override suspend fun getAll(): List<Account> =
+        dao.getAll().map { it.toDomain() }
+
     override suspend fun getById(id: Long): Account? =
         dao.getById(id)?.toDomain()
 

@@ -41,15 +41,18 @@ import doug.financetracker.ui.vmFactory
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    onOpenPending: () -> Unit
+) {
     val context = LocalContext.current
     val vm: SettingsViewModel = viewModel(
         factory = vmFactory {
             val c = appContainer(context)
-            SettingsViewModel(c.accountRepository, c.tagRepository)
+            SettingsViewModel(c.accountRepository, c.tagRepository, c.ingestSourceMessage)
         }
     )
     val state by vm.state.collectAsStateWithLifecycle()
+    val ingestResult by vm.ingestResult.collectAsStateWithLifecycle()
     var showAddAccount by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -131,6 +134,14 @@ fun SettingsScreen() {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+        item {
+            IngestTestCard(
+                result = ingestResult,
+                onIngest = vm::ingestTestMessage,
+                onClearResult = vm::clearIngestResult,
+                onOpenPending = onOpenPending
+            )
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
@@ -143,6 +154,48 @@ fun SettingsScreen() {
                 showAddAccount = false
             }
         )
+    }
+}
+
+@Composable
+private fun IngestTestCard(
+    result: String?,
+    onIngest: (String, String) -> Unit,
+    onClearResult: () -> Unit,
+    onOpenPending: () -> Unit
+) {
+    var sender by remember { mutableStateOf("Bancolombia") }
+    var message by remember { mutableStateOf("") }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Test ingestion", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Paste a bank SMS to run it through the real pipeline " +
+                    "(same path Phase 5 SMS delivery will use).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedTextField(
+                value = sender, onValueChange = { sender = it; onClearResult() },
+                label = { Text("Sender") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = message, onValueChange = { message = it; onClearResult() },
+                label = { Text("Message") }, minLines = 3,
+                modifier = Modifier.fillMaxWidth()
+            )
+            result?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { onIngest(sender, message) }) { Text("Ingest") }
+                TextButton(onClick = onOpenPending) { Text("View pending") }
+            }
+        }
     }
 }
 

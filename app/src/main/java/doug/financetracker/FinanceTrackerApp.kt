@@ -3,10 +3,14 @@ package doug.financetracker
 import android.app.Application
 import doug.financetracker.data.local.database.FinanceDatabase
 import doug.financetracker.data.repository.RoomAccountRepository
+import doug.financetracker.data.repository.RoomPendingReviewRepository
+import doug.financetracker.data.repository.RoomSourceEventRepository
 import doug.financetracker.data.repository.RoomTagRepository
 import doug.financetracker.data.repository.RoomTransactionRepository
+import doug.financetracker.domain.usecase.ConfirmPendingItem
 import doug.financetracker.domain.usecase.CreateTransaction
 import doug.financetracker.domain.usecase.DeleteTransaction
+import doug.financetracker.domain.usecase.IngestSourceMessage
 import doug.financetracker.domain.usecase.ObserveTransactionDetails
 import doug.financetracker.domain.usecase.ResolveTagNames
 import doug.financetracker.domain.usecase.UpdateTransaction
@@ -32,10 +36,16 @@ class AppContainer(app: Application) {
         tagDao = db.tagDao(),
         accountDao = db.accountDao()
     )
+    val sourceEventRepository = RoomSourceEventRepository(db.sourceEventDao())
+    val pendingReviewRepository = RoomPendingReviewRepository(db.pendingReviewDao())
 
     val observeTransactionDetails = ObserveTransactionDetails(transactionRepository)
     val createTransaction = CreateTransaction(transactionRepository)
     val updateTransaction = UpdateTransaction(transactionRepository)
     val deleteTransaction = DeleteTransaction(transactionRepository)
     val resolveTagNames = ResolveTagNames(transactionRepository)
+    val ingestSourceMessage = IngestSourceMessage(db)
+    val confirmPendingItem = ConfirmPendingItem(
+        pendingReviewRepository, transactionRepository, accountRepository
+    )
 }

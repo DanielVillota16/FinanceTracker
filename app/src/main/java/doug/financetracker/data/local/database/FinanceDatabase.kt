@@ -6,9 +6,13 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import doug.financetracker.data.local.dao.AccountDao
+import doug.financetracker.data.local.dao.PendingReviewDao
+import doug.financetracker.data.local.dao.SourceEventDao
 import doug.financetracker.data.local.dao.TagDao
 import doug.financetracker.data.local.dao.TransactionDao
 import doug.financetracker.data.local.entity.AccountEntity
+import doug.financetracker.data.local.entity.PendingReviewEntity
+import doug.financetracker.data.local.entity.SourceEventEntity
 import doug.financetracker.data.local.entity.TagEntity
 import doug.financetracker.data.local.entity.TransactionEntity
 import doug.financetracker.data.local.entity.TransactionTagCrossRef
@@ -19,15 +23,19 @@ import java.util.concurrent.Executors
         AccountEntity::class,
         TransactionEntity::class,
         TagEntity::class,
-        TransactionTagCrossRef::class
+        TransactionTagCrossRef::class,
+        SourceEventEntity::class,
+        PendingReviewEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class FinanceDatabase : RoomDatabase() {
     abstract fun accountDao(): AccountDao
     abstract fun transactionDao(): TransactionDao
     abstract fun tagDao(): TagDao
+    abstract fun sourceEventDao(): SourceEventDao
+    abstract fun pendingReviewDao(): PendingReviewDao
 
     companion object {
         @Volatile
@@ -45,6 +53,10 @@ abstract class FinanceDatabase : RoomDatabase() {
                 "finance_tracker.db"
             )
                 .addCallback(SeedCallback())
+                // Pre-release: destructive migration is acceptable (single-user dev
+                // installs). Phase 8 hardening adds exported schemas + tested
+                // migrations before any wider distribution.
+                .fallbackToDestructiveMigration()
                 .build()
 
         /** Seeds the five default user-owned accounts on first creation. */
