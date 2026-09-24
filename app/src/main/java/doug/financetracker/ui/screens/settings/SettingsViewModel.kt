@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import doug.financetracker.domain.model.Account
 import doug.financetracker.domain.model.Tag
+import android.content.Context
 import doug.financetracker.domain.repository.AccountRepository
 import doug.financetracker.domain.repository.TagRepository
 import doug.financetracker.domain.usecase.IngestSourceMessage
+import doug.financetracker.service.notification.NotificationAccess
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -83,5 +85,12 @@ class SettingsViewModel(
 
     fun clearIngestResult() {
         _ingestResult.value = null
+    }
+
+    private val _notificationEnabled = MutableStateFlow(false)
+    val notificationEnabled: StateFlow<Boolean> = _notificationEnabled.asStateFlow()
+
+    fun refreshNotificationStatus(context: Context) {
+        _notificationEnabled.value = NotificationAccess.isListenerEnabled(context)
     }
 }

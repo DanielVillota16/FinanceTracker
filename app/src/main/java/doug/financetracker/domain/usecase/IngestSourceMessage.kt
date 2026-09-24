@@ -8,6 +8,7 @@ import doug.financetracker.data.local.mapper.toEntity
 import doug.financetracker.domain.model.ParsedStatus
 import doug.financetracker.domain.model.PendingItem
 import doug.financetracker.domain.model.SourceEvent
+import doug.financetracker.domain.parser.NotificationParserRegistry
 import doug.financetracker.domain.parser.ParserRegistry
 
 /**
@@ -40,7 +41,15 @@ class IngestSourceMessage(
         db.sourceEventDao().getByFingerprint(fingerprint)?.let {
             return Result.Duplicate(it.id)
         }
-        val parsed = ParserRegistry.parse(rawContent)
+        // Notifications are interpreted by package-scoped parsers first; the
+        // generic SMS registry is only a fallback. Separate registries keep
+        // SMS and notification patterns from claiming each other (Phase 4).
+        val parsed = if (sourceType == "NOTIFICATION") {
+            NotificationParserRegistry.parse(sourceIdentifier, rawContent)
+                ?: ParserRegistry.parse(rawContent)
+        } else {
+            ParserRegistry.parse(rawContent)
+        }
         lateinit var result: Result
         db.withTransaction {
             // Recheck inside the transaction: a concurrent ingest may have won.

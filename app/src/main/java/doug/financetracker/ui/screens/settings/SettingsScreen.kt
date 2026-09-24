@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import doug.financetracker.domain.model.Account
+import doug.financetracker.service.notification.MonitoredPackages
+import doug.financetracker.service.notification.NotificationAccess
 import doug.financetracker.ui.appContainer
 import doug.financetracker.ui.vmFactory
 
@@ -53,7 +56,12 @@ fun SettingsScreen(
     )
     val state by vm.state.collectAsStateWithLifecycle()
     val ingestResult by vm.ingestResult.collectAsStateWithLifecycle()
+    val notificationEnabled by vm.notificationEnabled.collectAsStateWithLifecycle()
     var showAddAccount by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        vm.refreshNotificationStatus(context.applicationContext)
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -130,9 +138,16 @@ fun SettingsScreen(
             Text("About", style = MaterialTheme.typography.titleMedium)
             Text(
                 "FinanceTracker · private build · offline-first. " +
-                    "SMS, notification, and sync features arrive in later phases.",
+                    "SMS and sync features arrive in later phases.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        item {
+            NotificationSourcesCard(
+                enabled = notificationEnabled,
+                onRefresh = { vm.refreshNotificationStatus(context.applicationContext) },
+                onOpenSettings = { NotificationAccess.openSystemSettings(context.applicationContext) }
             )
         }
         item {
@@ -194,6 +209,43 @@ private fun IngestTestCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = { onIngest(sender, message) }) { Text("Ingest") }
                 TextButton(onClick = onOpenPending) { Text("View pending") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotificationSourcesCard(
+    enabled: Boolean,
+    onRefresh: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Notification sources", style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (enabled) "Listener enabled — monitoring financial notifications."
+                else "Listener disabled — enable notification access to detect payments.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (enabled) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.error
+            )
+            MonitoredPackages.MONITORED.forEach { source ->
+                Column {
+                    Text(source.label, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        source.packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onOpenSettings) { Text("System settings") }
+                TextButton(onClick = onRefresh) { Text("Refresh") }
             }
         }
     }
