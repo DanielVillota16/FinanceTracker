@@ -28,7 +28,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             FinanceTrackerTheme {
-                FinanceTrackerApp()
+                FinanceTrackerRoot()
             }
         }
     }
@@ -36,7 +36,7 @@ class MainActivity : ComponentActivity() {
 
 @PreviewScreenSizes
 @Composable
-fun FinanceTrackerApp() {
+fun FinanceTrackerRoot() {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
 
     NavigationSuiteScaffold(
