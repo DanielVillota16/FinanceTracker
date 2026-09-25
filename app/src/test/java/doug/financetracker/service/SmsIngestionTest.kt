@@ -32,6 +32,15 @@ class SmsIngestionTest {
     }
 
     @Test
+    fun `verified numeric short codes match exactly`() {
+        assertTrue(SupportedSmsSenders.isSupported("85540"))
+        assertTrue(SupportedSmsSenders.isSupported(" 85540 "))
+        // Exact digit equality: embedding the code in a longer number is not enough.
+        assertFalse(SupportedSmsSenders.isSupported("+5785540"))
+        assertFalse(SupportedSmsSenders.isSupported("855401"))
+    }
+
+    @Test
     fun `import loop gates senders and tallies outcomes`() = runTest {
         val rows = listOf(
             SmsHistoryImporter.SmsRow("Bancolombia", "Compraste \$5", 1000L),
