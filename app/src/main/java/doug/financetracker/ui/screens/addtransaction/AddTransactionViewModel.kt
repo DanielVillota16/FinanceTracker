@@ -16,6 +16,8 @@ import doug.financetracker.util.combineDateAndTime
 import doug.financetracker.util.hourOf
 import doug.financetracker.util.minuteOf
 import doug.financetracker.util.parseAmountToPesos
+import doug.financetracker.util.startOfLocalDayUtc
+import doug.financetracker.util.startOfUtcDay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -59,7 +61,7 @@ class AddTransactionViewModel(
     private val formOnly = MutableStateFlow(
         AddTransactionUiState(
             isEditMode = editId != null && editId >= 0,
-            dateMillis = System.currentTimeMillis(),
+            dateMillis = startOfLocalDayUtc(System.currentTimeMillis()),
             hour = hourOf(System.currentTimeMillis()),
             minute = minuteOf(System.currentTimeMillis())
         )
@@ -81,7 +83,7 @@ class AddTransactionViewModel(
                 TransactionType.INCOME -> accounts.firstOrNull()?.id
                 TransactionType.EXPENSE -> form.destinationAccountId
             },
-            dateMillis = if (form.dateMillis == 0L) now else form.dateMillis
+            dateMillis = if (form.dateMillis == 0L) startOfLocalDayUtc(now) else form.dateMillis
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AddTransactionUiState())
 
@@ -95,7 +97,7 @@ class AddTransactionViewModel(
                         isEditMode = true,
                         type = t.type,
                         amountText = t.amount.toString(),
-                        dateMillis = t.dateTime,
+                        dateMillis = startOfLocalDayUtc(t.dateTime),
                         hour = hourOf(t.dateTime),
                         minute = minuteOf(t.dateTime),
                         description = t.description,
@@ -123,7 +125,7 @@ class AddTransactionViewModel(
                             TransactionKind.UNKNOWN -> it.type
                         },
                         amountText = parsed.amountPesos?.toString().orEmpty(),
-                        dateMillis = dateTime,
+                        dateMillis = startOfLocalDayUtc(dateTime),
                         hour = hourOf(dateTime),
                         minute = minuteOf(dateTime),
                         counterparty = parsed.counterparty.orEmpty(),
@@ -169,7 +171,8 @@ class AddTransactionViewModel(
     fun onDestinationAccountChange(id: Long?) =
         formOnly.update { it.copy(destinationAccountId = id, accountError = null) }
 
-    fun onDateChange(millis: Long) = formOnly.update { it.copy(dateMillis = millis) }
+    fun onDateChange(millis: Long) =
+        formOnly.update { it.copy(dateMillis = startOfUtcDay(millis)) }
     fun onTimeChange(hour: Int, minute: Int) = formOnly.update { it.copy(hour = hour, minute = minute) }
     fun onTagTextChange(v: String) = formOnly.update { it.copy(tagText = v) }
 

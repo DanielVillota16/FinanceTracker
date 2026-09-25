@@ -4,6 +4,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -25,10 +26,37 @@ fun formatDate(millis: Long): String =
 fun formatTime(millis: Long): String =
     Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(TIME_FMT)
 
+/**
+ * Contract for the add/edit form's date field: it always holds UTC midnight
+ * of the user's LOCAL calendar day.
+ *
+ * Why: Material's DatePicker returns UTC midnight. Interpreting that instant
+ * in a negative-offset zone (e.g. Bogotá, UTC-5) yields the PREVIOUS day, so
+ * saving "today" stored yesterday. Normalizing every date (picked, prefilled,
+ * default) through here — and reading it back in UTC — keeps the calendar day
+ * exact regardless of zone.
+ */
+fun startOfLocalDayUtc(instantMillis: Long): Long =
+    Instant.ofEpochMilli(instantMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+        .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+/**
+ * Normalizes DatePicker output, which is ALREADY UTC midnight of the intended
+ * day: reading its UTC date back is the identity, and it stays correct even
+ * if the value ever arrives as a non-midnight instant on that UTC day.
+ */
+fun startOfUtcDay(millis: Long): Long =
+    Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
+        .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+fun formatFormDate(dateMillis: Long): String =
+    Instant.ofEpochMilli(dateMillis).atZone(ZoneOffset.UTC).format(DATE_FMT)
+
 fun combineDateAndTime(dateMillis: Long, hour: Int, minute: Int): Long {
-    val zone = ZoneId.systemDefault()
-    val date: LocalDate = Instant.ofEpochMilli(dateMillis).atZone(zone).toLocalDate()
-    return date.atTime(LocalTime.of(hour, minute)).atZone(zone).toInstant().toEpochMilli()
+    // dateMillis is UTC midnight of the local day (see startOfLocalDayUtc).
+    val date: LocalDate = Instant.ofEpochMilli(dateMillis).atZone(ZoneOffset.UTC).toLocalDate()
+    return date.atTime(LocalTime.of(hour, minute)).atZone(ZoneId.systemDefault())
+        .toInstant().toEpochMilli()
 }
 
 fun hourOf(millis: Long): Int =

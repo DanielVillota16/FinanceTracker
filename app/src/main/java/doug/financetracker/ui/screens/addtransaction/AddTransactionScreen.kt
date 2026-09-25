@@ -49,7 +49,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import doug.financetracker.domain.model.TransactionType
 import doug.financetracker.ui.appContainer
 import doug.financetracker.ui.vmFactory
-import doug.financetracker.util.formatDate
+import doug.financetracker.util.formatFormDate
 import doug.financetracker.util.formatTime
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -125,7 +125,7 @@ fun AddTransactionScreen(
             OutlinedButton(
                 onClick = { showDatePicker = true },
                 modifier = Modifier.weight(1f)
-            ) { Text(formatDate(s.dateMillis)) }
+            ) { Text(formatFormDate(s.dateMillis)) }
             OutlinedButton(
                 onClick = { showTimePicker = true },
                 modifier = Modifier.weight(1f)
