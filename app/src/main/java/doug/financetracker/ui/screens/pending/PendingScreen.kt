@@ -1,5 +1,6 @@
 package doug.financetracker.ui.screens.pending
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,6 +17,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHostState
@@ -27,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +59,8 @@ fun PendingScreen(
         }
     )
     val candidates by vm.candidates.collectAsStateWithLifecycle()
+    val selecting by vm.selecting.collectAsStateWithLifecycle()
+    val selected by vm.selected.collectAsStateWithLifecycle()
     var dismissTarget by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(vm) {
@@ -64,12 +69,23 @@ fun PendingScreen(
                 is PendingViewModel.Event.OpenEdit -> onEdit(event.pendingId)
                 is PendingViewModel.Event.Error ->
                     snackbar.showSnackbar(event.message)
+                is PendingViewModel.Event.Info ->
+                    snackbar.showSnackbar(event.message)
             }
         }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Pending Review", style = MaterialTheme.typography.headlineSmall)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Pending Review", style = MaterialTheme.typography.headlineSmall)
+            TextButton(onClick = { vm.setSelecting(!selecting) }) {
+                Text(if (selecting) "Cancel" else "Select")
+            }
+        }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             "${candidates.size} candidate(s) awaiting confirmation",
@@ -77,6 +93,28 @@ fun PendingScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(12.dp))
+        if (selecting) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "${selected.size} selected",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    enabled = selected.isNotEmpty(),
+                    onClick = vm::confirmSelected
+                ) { Text("Confirm") }
+                OutlinedButton(
+                    enabled = selected.isNotEmpty(),
+                    onClick = vm::dismissSelected
+                ) { Text("Dismiss") }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
         if (candidates.isEmpty()) {
             Text(
                 "Nothing to review. New financial messages will appear here.",
@@ -89,8 +127,12 @@ fun PendingScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(candidates, key = { it.id }) { candidate ->
+                    val isSelected = candidate.id in selected
                     PendingCard(
                         candidate = candidate,
+                        selectionMode = selecting,
+                        isSelected = isSelected,
+                        onToggleSelect = { vm.toggleSelect(candidate.id) },
                         onConfirm = { vm.confirmCandidate(candidate) },
                         onEdit = { onEdit(candidate.primary.id) },
                         onDismiss = { dismissTarget = candidate.id }
@@ -121,6 +163,9 @@ fun PendingScreen(
 @Composable
 private fun PendingCard(
     candidate: PendingCandidate,
+    selectionMode: Boolean,
+    isSelected: Boolean,
+    onToggleSelect: () -> Unit,
     onConfirm: () -> Unit,
     onEdit: () -> Unit,
     onDismiss: () -> Unit
@@ -144,12 +189,23 @@ private fun PendingCard(
     val amountText = p.amountPesos?.let { Money.formatCop(it) } ?: "Amount unknown"
     val extraCounterparties = candidate.counterparties.drop(1)
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+            .let { if (selectionMode) it.clickable(onClick = onToggleSelect) else it }
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                if (selectionMode) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelect() }
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
                 Text(
                     title,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
