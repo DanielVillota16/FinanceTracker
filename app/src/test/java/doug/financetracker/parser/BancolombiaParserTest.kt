@@ -21,6 +21,25 @@ class BancolombiaParserTest {
             .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
     @Test
+    fun `real purchase sms with service tail parses exactly`() {
+        // Authoritative fixture, verbatim including the service tail.
+        val result = parser.parse(
+            "Bancolombia: Compraste \$29.000,00 en BOLD SA*20 DE JU con tu T.Deb *0757, " +
+                "el 21/09/2026 a las 08:27. Si tienes dudas, encuentranos aqui: " +
+                "6045109095 o 018000931987. Estamos cerca"
+        )
+        assertNotNull(result)
+        assertEquals(29_000L, result!!.amountPesos)
+        assertEquals(Direction.OUTGOING, result.direction)
+        assertEquals(TransactionKind.EXPENSE, result.transactionKind)
+        assertEquals("Bancolombia", result.institution)
+        assertEquals("BOLD SA*20 DE JU", result.counterparty)
+        assertEquals("0757", result.sourceAccountHint?.lastDigits)
+        assertEquals(millis(2026, 9, 21, 8, 27), result.timestampMillis)
+        assertEquals(Confidence.HIGH, result.confidence)
+    }
+
+    @Test
     fun `purchase produces expense with counterparty and account hint`() {
         val result = parser.parse(
             "Compraste \$29.000,00 en BOLD SA*20 DE JU con tu T.Deb *0757 el 21/09/2026 a las 08:27."

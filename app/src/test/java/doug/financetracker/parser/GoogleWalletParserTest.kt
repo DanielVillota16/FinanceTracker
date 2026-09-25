@@ -15,6 +15,50 @@ class GoogleWalletParserTest {
     private val parser = GoogleWalletParser()
 
     @Test
+    fun `real wallet purchase uses title as merchant`() {
+        // Authoritative fixture: title + "\n" + text as composed by the listener.
+        val result = parser.parse(
+            "TIEN IA D1 PSTO IAM I\nCOP 99,320.00 with Mastercard Platinum ••1444"
+        )
+        assertNotNull(result)
+        assertEquals(99_320L, result!!.amountPesos)
+        assertEquals(Direction.OUTGOING, result.direction)
+        assertEquals(TransactionKind.EXPENSE, result.transactionKind)
+        assertEquals("Google Wallet", result.institution)
+        assertEquals("TIEN IA D1 PSTO IAM I", result.counterparty)
+        assertEquals("1444", result.sourceAccountHint?.lastDigits)
+        assertEquals("Mastercard Platinum", result.reference)
+        assertEquals(Confidence.HIGH, result.confidence)
+    }
+
+    @Test
+    fun `wallet body carries no date so timestamp stays null`() {
+        val result = parser.parse(
+            "TIEN IA D1 PSTO IAM I\nCOP 99,320.00 with Mastercard Platinum ••1444"
+        )
+        assertNotNull(result)
+        // The notification post time becomes the event time at ingestion.
+        assertNull(result!!.timestampMillis)
+        assertTrue(result.warnings.any { it.contains("date/time", ignoreCase = true) })
+    }
+
+    @Test
+    fun `alternative mask glyphs still yield the suffix`() {
+        val variants = listOf(
+            "TIENDA X\nCOP 29,000.00 with Visa Gold ··0757",
+            "TIENDA X\nCOP 29,000.00 with Visa Gold **0757",
+            "TIENDA X\nCOP 29,000.00 with Visa Gold •• 0757"
+        )
+        for (body in variants) {
+            val result = parser.parse(body)
+            assertNotNull("failed for: $body", result)
+            assertEquals("failed for: $body", 29_000L, result!!.amountPesos)
+            assertEquals("failed for: $body", "TIENDA X", result.counterparty)
+            assertEquals("failed for: $body", "0757", result.sourceAccountHint?.lastDigits)
+        }
+    }
+
+    @Test
     fun `payment with masked card parses to expense`() {
         val result = parser.parse(
             "Pagaste \$45.900 en DROGUERIA ALEMANA con tu tarjeta •• 4821"

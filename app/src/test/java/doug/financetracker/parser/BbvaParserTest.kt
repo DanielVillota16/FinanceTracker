@@ -8,10 +8,52 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 class BbvaParserTest {
 
     private val parser = BbvaParser()
+
+    private fun millis(year: Int, month: Int, day: Int, hour: Int, minute: Int): Long =
+        LocalDateTime.of(year, month, day, hour, minute)
+            .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+    @Test
+    fun `real play store purchase parses exactly`() {
+        // Authoritative fixture: title + "\n" + text as composed by the listener.
+        val result = parser.parse(
+            "Compra Exitosa\n" +
+                "Hola, realizaste una compra por \$4,000.00 en Google doan toan " +
+                "con tu tarjeta BBVA *1444. El 2026-09-24 a las 13:06."
+        )
+        assertNotNull(result)
+        assertEquals(4_000L, result!!.amountPesos)
+        assertEquals(Direction.OUTGOING, result.direction)
+        assertEquals(TransactionKind.EXPENSE, result.transactionKind)
+        assertEquals("BBVA", result.institution)
+        assertEquals("Google doan toan", result.counterparty)
+        assertEquals("1444", result.sourceAccountHint?.lastDigits)
+        assertEquals(millis(2026, 9, 24, 13, 6), result.timestampMillis)
+        assertEquals(Confidence.HIGH, result.confidence)
+    }
+
+    @Test
+    fun `real physical-store purchase parses exactly`() {
+        val result = parser.parse(
+            "Compra Exitosa\n" +
+                "Hola, realizaste una compra por \$99,320.00 en Tien ia d1 psto " +
+                "con tu tarjeta BBVA *1444. El 2026-09-24 a las 14:53."
+        )
+        assertNotNull(result)
+        assertEquals(99_320L, result!!.amountPesos)
+        assertEquals(Direction.OUTGOING, result.direction)
+        assertEquals(TransactionKind.EXPENSE, result.transactionKind)
+        assertEquals("Tien ia d1 psto", result.counterparty)
+        assertEquals("1444", result.sourceAccountHint?.lastDigits)
+        assertEquals(millis(2026, 9, 24, 14, 53), result.timestampMillis)
+        assertEquals(Confidence.HIGH, result.confidence)
+    }
 
     @Test
     fun `purchase parses to expense`() {

@@ -1,22 +1,30 @@
 package doug.financetracker.domain.parser
 
 /**
- * Parser for BBVA app notifications (any `*bbva*` package).
+ * Parser for BBVA Colombia app notifications (package `co.com.bbva.mb`,
+ * plus any other `*bbva*` package variant).
  *
- * NOTE: exact wording is based on plausible BBVA Colombia notification text,
- * not on captured samples yet. Supported shapes:
- * - "Compra por $85.000 en EXITO" → EXPENSE
- * - "Transferencia recibida de EMPRESA SAS por $1.200.000" → INCOME
- * - "Transferiste $300.000 a cuenta *5678" → UNKNOWN (TRANSFER/EXPENSE)
- * - "Retiro de $200.000 en cajero CALLE 100" → TRANSFER to Cash
+ * Real authoritative fixtures (credit-card purchases — the only BBVA product
+ * currently owned, so transfers/ATM shapes are intentionally unsupported):
+ * - Play Store: "Hola, realizaste una compra por $4,000.00 en Google doan toan
+ *   con tu tarjeta BBVA *1444. El 2026-09-24 a las 13:06."
+ *   → EXPENSE 4000, "Google doan toan" (verbatim), *1444, 2026-09-24 13:06
+ * - Physical via Wallet: "Hola, realizaste una compra por $99,320.00 en
+ *   Tien ia d1 psto con tu tarjeta BBVA *1444. El 2026-09-24 a las 14:53."
+ *   → EXPENSE 99320, "Tien ia d1 psto", *1444, 2026-09-24 14:53
  *
- * Refine with real payloads when available.
+ * Merchant text is preserved exactly as reported — never "corrected".
  */
 class BbvaParser : NotificationParser {
     override val institution: String = "BBVA"
 
+    /** Real shape: "... compra por $X en MERCHANT con tu tarjeta BBVA *XXXX. El DATE ..." */
+    private val bbvaCardPurchaseRx = Regex(
+        """realizaste\s+una\s+compra\s+por\s+\$?\s*([\d.,]+)\s+en\s+(.+?)\s+con\s+tu\s+tarjeta\s+BBVA\s+\*(\d{3,6})""",
+        RegexOption.IGNORE_CASE
+    )
     private val purchaseRx = Regex(
-        """(?:compra(?:ste)?|pago)(?:\s+por)?(?:\s+valor\s+de)?\s+\$?\s*([\d.,]+)\s+en\s+(.+?)(?:\s*$|\.)""",
+        """(?:compra(?:ste)?|pago)(?:\s+por)?(?:\s+valor\s+de)?\s+\$?\s*([\d.,]+)\s+en\s+(.+?)(?:\s+con\s+tu\s+tarjeta|\s+el\s+|\s*$|\.)""",
         RegexOption.IGNORE_CASE
     )
     private val incomeRx = Regex(
@@ -41,6 +49,7 @@ class BbvaParser : NotificationParser {
 
     override fun canHandle(raw: String): Boolean =
         Regex("""bbva""", RegexOption.IGNORE_CASE).containsMatchIn(raw) ||
+            bbvaCardPurchaseRx.containsMatchIn(raw) ||
             purchaseRx.containsMatchIn(raw) || incomeRx.containsMatchIn(raw) ||
             incomeAltRx.containsMatchIn(raw) || transferRx.containsMatchIn(raw) ||
             atmRx.containsMatchIn(raw)
@@ -48,6 +57,27 @@ class BbvaParser : NotificationParser {
     override fun parse(raw: String): ParsedTransaction? {
         val warnings = mutableListOf<String>()
         val timestamp = ParserUtils.extractTimestamp(raw, warnings)
+
+        bbvaCardPurchaseRx.find(raw)?.let { m ->
+            val amount = CopAmountParser.parse(m.groupValues[1])
+            val counterparty = ParserUtils.cleanCounterparty(m.groupValues[2])
+            val suffix = m.groupValues[3]
+            if (amount == null) warnings += "Amount could not be parsed."
+            if (counterparty == null) warnings += "Merchant not identified."
+            return ParsedTransaction(
+                amountPesos = amount,
+                direction = Direction.OUTGOING,
+                transactionKind = TransactionKind.EXPENSE,
+                institution = institution,
+                sourceAccountHint = AccountHint(lastDigits = suffix, label = "BBVA"),
+                destinationAccountHint = null,
+                counterparty = counterparty,
+                timestampMillis = timestamp,
+                reference = "BBVA",
+                confidence = if (amount != null && counterparty != null) Confidence.HIGH else Confidence.MEDIUM,
+                warnings = warnings
+            )
+        }
 
         purchaseRx.find(raw)?.let { m ->
             val amount = CopAmountParser.parse(m.groupValues[1])

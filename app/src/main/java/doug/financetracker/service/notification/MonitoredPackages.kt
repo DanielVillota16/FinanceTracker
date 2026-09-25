@@ -13,7 +13,7 @@ object MonitoredPackages {
     /** Canonical packages shown in Settings; variants are matched via parsers. */
     val MONITORED = listOf(
         Source("com.google.android.apps.walletnfcrel", "Google Wallet"),
-        Source("com.bbva.bbvacolombia", "BBVA")
+        Source("co.com.bbva.mb", "BBVA Colombia")
     )
 
     fun isMonitored(packageName: String): Boolean {

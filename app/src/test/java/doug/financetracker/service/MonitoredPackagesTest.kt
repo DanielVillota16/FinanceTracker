@@ -10,7 +10,8 @@ class MonitoredPackagesTest {
     @Test
     fun `canonical packages are monitored`() {
         assertTrue(MonitoredPackages.isMonitored("com.google.android.apps.walletnfcrel"))
-        assertTrue(MonitoredPackages.isMonitored("com.bbva.bbvacolombia"))
+        // Real BBVA Colombia package (Play Store id=co.com.bbva.mb).
+        assertTrue(MonitoredPackages.isMonitored("co.com.bbva.mb"))
     }
 
     @Test
