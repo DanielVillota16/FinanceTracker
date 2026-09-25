@@ -31,6 +31,9 @@ class FinanceNotificationListener : NotificationListenerService() {
         val posted = sbn ?: return
         try {
             if (!MonitoredPackages.isMonitored(posted.packageName)) return
+            // Ongoing/progress notifications (downloads, music, navigation) are
+            // never financial events.
+            if (posted.notification.flags and android.app.Notification.FLAG_ONGOING_EVENT != 0) return
             val extras = posted.notification.extras
             val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
             val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString().orEmpty()

@@ -78,6 +78,22 @@ fun SettingsScreen(
         vm.refreshSmsPermission()
     }
 
+    // Permissions can change while the app is backgrounded (user grants SMS in
+    // the system dialog, toggles notification access in Settings), so refresh
+    // on every resume — not just on first composition.
+    androidx.lifecycle.compose.LocalLifecycleOwner.current.let { owner ->
+        androidx.compose.runtime.DisposableEffect(owner) {
+            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                    vm.refreshNotificationStatus(context.applicationContext)
+                    vm.refreshSmsPermission()
+                }
+            }
+            owner.lifecycle.addObserver(observer)
+            onDispose { owner.lifecycle.removeObserver(observer) }
+        }
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)

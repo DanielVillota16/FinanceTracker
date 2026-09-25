@@ -34,7 +34,7 @@ import java.util.concurrent.Executors
         SyncTombstoneEntity::class
     ],
     version = 5,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class FinanceDatabase : RoomDatabase() {
     abstract fun accountDao(): AccountDao
@@ -61,10 +61,9 @@ abstract class FinanceDatabase : RoomDatabase() {
                 "finance_tracker.db"
             )
                 .addCallback(SeedCallback())
-                // Pre-release: destructive migration is acceptable (single-user dev
-                // installs). Phase 8 hardening adds exported schemas + tested
-                // migrations before any wider distribution.
-                .fallbackToDestructiveMigration()
+                // Explicit tested migrations only. A schema mismatch now fails
+                // loudly instead of wiping records (see Migrations + tests).
+                .addMigrations(*Migrations.ALL)
                 .build()
 
         /** Seeds the five default user-owned accounts on first creation. */

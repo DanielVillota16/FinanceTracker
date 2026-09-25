@@ -49,6 +49,26 @@ android {
         compose = true
         buildConfig = true
     }
+    sourceSets {
+        // Room schema exports double as MigrationTestHelper assets in JVM tests.
+        getByName("test").assets.srcDirs("schemas")
+    }
+}
+
+// Room schema export (committed; future migrations are tested against these).
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+// Robolectric sandboxes are picky about runtimes (SDK 36 needs Java 21);
+// the Gradle daemon here may run much newer, so pin unit-test execution
+// to JDK 21 (auto-provisioned if missing).
+tasks.withType<Test>().configureEach {
+    javaLauncher.set(
+        javaToolchains.launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(21))
+        }
+    )
 }
 
 dependencies {
@@ -74,8 +94,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
+    testImplementation(libs.androidx.test.core)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.room.testing)
+    testImplementation(libs.robolectric)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
