@@ -30,7 +30,8 @@ class SettingsViewModel(
     private val app: Application,
     private val accounts: AccountRepository,
     private val tags: TagRepository,
-    private val ingest: IngestSourceMessage
+    private val ingest: IngestSourceMessage,
+    private val auth: doug.financetracker.data.remote.supabase.AuthRepository
 ) : ViewModel() {
 
     val state: StateFlow<SettingsUiState> = combine(
@@ -135,5 +136,56 @@ class SettingsViewModel(
 
     fun clearSmsImport() {
         _smsImport.value = SmsImportState.Idle
+    }
+
+    // Supabase auth (Phase 7) ------------------------------------------------
+
+    val authConfigured: Boolean get() = auth.isConfigured
+
+    val authSession: StateFlow<doug.financetracker.data.remote.supabase.AuthRepository.Session?> =
+        auth.observeSession()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _authError = MutableStateFlow<String?>(null)
+    val authError: StateFlow<String?> = _authError.asStateFlow()
+
+    private val _authBusy = MutableStateFlow(false)
+    val authBusy: StateFlow<Boolean> = _authBusy.asStateFlow()
+
+    fun signIn(email: String, password: String) = authAction {
+        auth.signIn(email, password)
+    }
+
+    fun signUp(email: String, password: String) = authAction {
+        auth.signUp(email, password)
+    }
+
+    fun signOut() {
+        viewModelScope.launch {
+            try {
+                auth.signOut()
+                _authError.value = null
+            } catch (e: Exception) {
+                _authError.value = e.message ?: "Sign-out failed."
+            }
+        }
+    }
+
+    fun clearAuthError() {
+        _authError.value = null
+    }
+
+    private fun authAction(block: suspend () -> Unit) {
+        if (_authBusy.value) return
+        viewModelScope.launch {
+            _authBusy.value = true
+            _authError.value = try {
+                block()
+                null
+            } catch (e: Exception) {
+                e.message ?: "Authentication failed."
+            }
+            _authBusy.value = false
+        }
     }
 }

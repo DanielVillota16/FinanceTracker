@@ -1,8 +1,11 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
+
+import java.util.Properties
 
 android {
     namespace = "doug.financetracker"
@@ -18,6 +21,17 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Supabase client config comes from gitignored local.properties
+        // (SUPABASE_URL, SUPABASE_KEY). Empty means sync is disabled.
+        val localProps = Properties().apply {
+            rootDir.resolve("local.properties").takeIf { it.exists() }
+                ?.inputStream()?.use(::load)
+        }
+        val supabaseUrl: String = localProps.getProperty("SUPABASE_URL", "")
+        val supabaseKey: String = localProps.getProperty("SUPABASE_KEY", "")
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_KEY", "\"$supabaseKey\"")
     }
 
     buildTypes {
@@ -33,10 +47,15 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
 dependencies {
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.auth.kt)
+    implementation(libs.supabase.postgrest.kt)
+    implementation(libs.kotlinx.serialization.json)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

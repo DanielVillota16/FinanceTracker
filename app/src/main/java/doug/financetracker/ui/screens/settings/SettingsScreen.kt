@@ -55,7 +55,7 @@ fun SettingsScreen(
         factory = vmFactory {
             val c = appContainer(context)
             val app = context.applicationContext as FinanceTrackerApp
-            SettingsViewModel(app, c.accountRepository, c.tagRepository, c.ingestSourceMessage)
+            SettingsViewModel(app, c.accountRepository, c.tagRepository, c.ingestSourceMessage, c.authRepository)
         }
     )
     val state by vm.state.collectAsStateWithLifecycle()
@@ -63,6 +63,9 @@ fun SettingsScreen(
     val notificationEnabled by vm.notificationEnabled.collectAsStateWithLifecycle()
     val smsGranted by vm.smsGranted.collectAsStateWithLifecycle()
     val smsImport by vm.smsImport.collectAsStateWithLifecycle()
+    val authSession by vm.authSession.collectAsStateWithLifecycle()
+    val authBusy by vm.authBusy.collectAsStateWithLifecycle()
+    val authError by vm.authError.collectAsStateWithLifecycle()
     var showAddAccount by remember { mutableStateOf(false) }
 
     val smsPermissionLauncher = rememberLauncherForActivityResult(
@@ -173,6 +176,19 @@ fun SettingsScreen(
             )
         }
         item {
+            SupabaseAuthCard(
+                configured = vm.authConfigured,
+                sessionEmail = authSession?.email,
+                signedIn = authSession != null,
+                busy = authBusy,
+                error = authError,
+                onSignIn = vm::signIn,
+                onSignUp = vm::signUp,
+                onSignOut = vm::signOut,
+                onClearError = vm::clearAuthError
+            )
+        }
+        item {
             IngestTestCard(
                 result = ingestResult,
                 onIngest = vm::ingestTestMessage,
@@ -260,6 +276,80 @@ private fun SmsSourcesCard(
                     )
                     TextButton(onClick = onOpenPending) { Text("View pending") }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SupabaseAuthCard(
+    configured: Boolean,
+    sessionEmail: String?,
+    signedIn: Boolean,
+    busy: Boolean,
+    error: String?,
+    onSignIn: (String, String) -> Unit,
+    onSignUp: (String, String) -> Unit,
+    onSignOut: () -> Unit,
+    onClearError: () -> Unit
+) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Remote backup (Supabase)", style = MaterialTheme.typography.titleMedium)
+            if (!configured) {
+                Text(
+                    "Sync is not configured on this build (no Supabase URL/key). " +
+                        "The app works fully offline.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                return@Column
+            }
+            Text(
+                if (signedIn) "Signed in as ${sessionEmail ?: "user"}."
+                else "Sign in to enable encrypted remote backup of transactions, accounts and tags.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (signedIn) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (!signedIn) {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it; onClearError() },
+                    label = { Text("Email") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it; onClearError() },
+                    label = { Text("Password") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                error?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        enabled = !busy && email.isNotBlank() && password.isNotBlank(),
+                        onClick = { onSignIn(email, password) }
+                    ) { Text("Sign in") }
+                    TextButton(
+                        enabled = !busy && email.isNotBlank() && password.isNotBlank(),
+                        onClick = { onSignUp(email, password) }
+                    ) { Text("Create account") }
+                }
+            } else {
+                error?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(enabled = !busy, onClick = onSignOut) { Text("Sign out") }
             }
         }
     }
