@@ -84,46 +84,67 @@ class SyncEngine(
             }
         }
 
-        // 2. Push accounts (fetch-or-create by natural key, upsert by id).
+        // 2. Push accounts. The remote id is claimed LOCALLY before any
+        // network write (adopting an existing remote row by natural key, else
+        // a fresh UUID), so a retry after a partial failure upserts the same
+        // row instead of orphaning a duplicate the next pull would copy back
+        // (observed bug: tagless duplicates differing only in tags).
         for (entity in db.accountDao().getAll()) {
             if (entity.syncStatus == SyncStatus.SYNCED.name) continue
             attempt {
-                val remoteId = entity.remoteId
-                    ?: findRemoteAccount(pg, entity)?.id
-                    ?: UUID.randomUUID().toString()
-                pg.from("accounts").upsert(toRemote(entity, remoteId)) {
+                var row = entity
+                var remoteId = row.remoteId
+                if (remoteId == null) {
+                    remoteId = findRemoteAccount(pg, row)?.id
+                        ?: UUID.randomUUID().toString()
+                    row = row.copy(remoteId = remoteId)
+                    db.accountDao().update(row)
+                }
+                pg.from("accounts").upsert(toRemote(row, remoteId)) {
                     onConflict = "id"
                 }
                 db.accountDao().update(
-                    entity.copy(remoteId = remoteId, syncStatus = SyncStatus.SYNCED.name)
+                    row.copy(remoteId = remoteId, syncStatus = SyncStatus.SYNCED.name)
                 )
                 pushed++
             }
         }
 
-        // 3. Push tags (fetch-or-create by name — unique per owner server-side).
+        // 3. Push tags (same claim-before-write; natural key is the name).
         for (entity in db.tagDao().getAll()) {
             if (entity.syncStatus == SyncStatus.SYNCED.name) continue
             attempt {
-                val remoteId = entity.remoteId
-                    ?: findRemoteTag(pg, entity.name)?.id
-                    ?: UUID.randomUUID().toString()
-                pg.from("tags").upsert(toRemote(entity, remoteId)) {
+                var row = entity
+                var remoteId = row.remoteId
+                if (remoteId == null) {
+                    remoteId = findRemoteTag(pg, row.name)?.id
+                        ?: UUID.randomUUID().toString()
+                    row = row.copy(remoteId = remoteId)
+                    db.tagDao().update(row)
+                }
+                pg.from("tags").upsert(toRemote(row, remoteId)) {
                     onConflict = "id"
                 }
                 db.tagDao().update(
-                    entity.copy(remoteId = remoteId, syncStatus = SyncStatus.SYNCED.name)
+                    row.copy(remoteId = remoteId, syncStatus = SyncStatus.SYNCED.name)
                 )
                 pushed++
             }
         }
 
-        // 4. Push transactions + their links.
+        // 4. Push transactions + their links. Same claim-before-write rule:
+        // transactions have no natural key, so the stable local id is the
+        // only thing standing between a partial failure and a duplicate.
         val transactions = db.transactionDao().getAllWithTags()
         for (row in transactions) {
-            val entity = row.transaction
+            var entity = row.transaction
             if (entity.syncStatus == SyncStatus.SYNCED.name) continue
             attempt {
+                if (entity.remoteId == null) {
+                    entity = entity.copy(remoteId = UUID.randomUUID().toString())
+                    db.transactionDao().update(entity)
+                }
+                val remoteId = entity.remoteId!!
                 val sourceRemote = entity.sourceAccountId?.let { localId ->
                     db.accountDao().getById(localId)?.remoteId
                         ?: throw IllegalStateException("Source account not synced yet")
@@ -132,7 +153,6 @@ class SyncEngine(
                     db.accountDao().getById(localId)?.remoteId
                         ?: throw IllegalStateException("Destination account not synced yet")
                 }
-                val remoteId = entity.remoteId ?: UUID.randomUUID().toString()
                 pg.from("transactions").upsert(toRemote(entity, remoteId, sourceRemote, destRemote)) {
                     onConflict = "id"
                 }
