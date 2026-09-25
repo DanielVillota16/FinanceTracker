@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -74,6 +75,10 @@ fun AddTransactionScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val nextAction = androidx.compose.foundation.text.KeyboardActions(
+        onNext = { focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down) }
+    )
 
     LaunchedEffect(s.saved, s.deleted) {
         if (s.saved || s.deleted) onDone()
@@ -82,6 +87,9 @@ fun AddTransactionScreen(
     Column(
         modifier = Modifier.fillMaxSize()
             .verticalScroll(rememberScrollState())
+            // Keep the focused field above the soft keyboard: resize alone
+            // shrinks the window but never scrolls the focused field into view.
+            .imePadding()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -114,7 +122,11 @@ fun AddTransactionScreen(
             onValueChange = vm::onAmountChange,
             label = { Text("Amount (COP)") },
             prefix = { Text("$") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = androidx.compose.ui.text.input.ImeAction.Next
+            ),
+            keyboardActions = nextAction,
             isError = s.amountError != null,
             supportingText = s.amountError?.let { { Text(it) } },
             singleLine = true,
@@ -169,6 +181,8 @@ fun AddTransactionScreen(
                 value = s.counterparty,
                 onValueChange = vm::onCounterpartyChange,
                 label = { Text(if (s.type == TransactionType.EXPENSE) "Paid to (counterparty)" else "Received from (counterparty)") },
+                keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Next),
+                keyboardActions = nextAction,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -177,6 +191,8 @@ fun AddTransactionScreen(
             value = s.description,
             onValueChange = vm::onDescriptionChange,
             label = { Text("Description") },
+            keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Next),
+            keyboardActions = nextAction,
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -200,6 +216,10 @@ fun AddTransactionScreen(
             value = s.tagText,
             onValueChange = vm::onTagTextChange,
             label = { Text("New tags (comma separated)") },
+            keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onDone = { focusManager.clearFocus() }
+            ),
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
