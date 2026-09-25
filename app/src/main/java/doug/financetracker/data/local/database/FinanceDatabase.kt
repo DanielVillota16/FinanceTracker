@@ -9,11 +9,13 @@ import doug.financetracker.data.local.dao.AccountDao
 import doug.financetracker.data.local.dao.PendingReviewDao
 import doug.financetracker.data.local.dao.SourceEventDao
 import doug.financetracker.data.local.dao.TagDao
+import doug.financetracker.data.local.dao.TransactionCandidateDao
 import doug.financetracker.data.local.dao.TransactionDao
 import doug.financetracker.data.local.entity.AccountEntity
 import doug.financetracker.data.local.entity.PendingReviewEntity
 import doug.financetracker.data.local.entity.SourceEventEntity
 import doug.financetracker.data.local.entity.TagEntity
+import doug.financetracker.data.local.entity.TransactionCandidateEntity
 import doug.financetracker.data.local.entity.TransactionEntity
 import doug.financetracker.data.local.entity.TransactionTagCrossRef
 import java.util.concurrent.Executors
@@ -25,9 +27,10 @@ import java.util.concurrent.Executors
         TagEntity::class,
         TransactionTagCrossRef::class,
         SourceEventEntity::class,
-        PendingReviewEntity::class
+        PendingReviewEntity::class,
+        TransactionCandidateEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class FinanceDatabase : RoomDatabase() {
@@ -36,6 +39,7 @@ abstract class FinanceDatabase : RoomDatabase() {
     abstract fun tagDao(): TagDao
     abstract fun sourceEventDao(): SourceEventDao
     abstract fun pendingReviewDao(): PendingReviewDao
+    abstract fun transactionCandidateDao(): TransactionCandidateDao
 
     companion object {
         @Volatile

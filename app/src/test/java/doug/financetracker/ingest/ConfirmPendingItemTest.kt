@@ -56,14 +56,20 @@ class ConfirmPendingItemTest {
     private class FakePending(val items: MutableMap<Long, PendingItem>) : PendingReviewRepository {
         val confirmed = mutableListOf<Pair<Long, Long>>()
         val dismissed = mutableListOf<Long>()
+        val dismissedCandidates = mutableListOf<Long>()
         override fun observePending(): Flow<List<PendingItem>> =
             MutableStateFlow(items.values.toList())
+        override fun observeCandidates(): Flow<List<doug.financetracker.domain.model.PendingCandidate>> =
+            flowOf(emptyList())
         override suspend fun getItem(id: Long): PendingItem? = items[id]
         override suspend fun confirm(id: Long, linkedTransactionId: Long) {
             confirmed += id to linkedTransactionId
         }
         override suspend fun dismiss(id: Long) {
             dismissed += id
+        }
+        override suspend fun dismissCandidate(candidateId: Long) {
+            dismissedCandidates += candidateId
         }
     }
 

@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import doug.financetracker.domain.model.Money
-import doug.financetracker.domain.model.PendingItem
+import doug.financetracker.domain.model.PendingCandidate
 import doug.financetracker.domain.parser.AccountHint
 import doug.financetracker.domain.parser.Confidence
 import doug.financetracker.domain.parser.TransactionKind
@@ -54,7 +54,7 @@ fun PendingScreen(
             PendingViewModel(c.pendingReviewRepository, c.confirmPendingItem)
         }
     )
-    val items by vm.items.collectAsStateWithLifecycle()
+    val candidates by vm.candidates.collectAsStateWithLifecycle()
     var dismissTarget by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(vm) {
@@ -71,12 +71,12 @@ fun PendingScreen(
         Text("Pending Review", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            "${items.size} item(s) awaiting confirmation",
+            "${candidates.size} candidate(s) awaiting confirmation",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(12.dp))
-        if (items.isEmpty()) {
+        if (candidates.isEmpty()) {
             Text(
                 "Nothing to review. New financial messages will appear here.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -87,12 +87,12 @@ fun PendingScreen(
                 contentPadding = PaddingValues(bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(items, key = { it.id }) { item ->
+                items(candidates, key = { it.id }) { candidate ->
                     PendingCard(
-                        item = item,
-                        onConfirm = { vm.confirmItem(item.id) },
-                        onEdit = { onEdit(item.id) },
-                        onDismiss = { dismissTarget = item.id }
+                        candidate = candidate,
+                        onConfirm = { vm.confirmCandidate(candidate) },
+                        onEdit = { onEdit(candidate.primary.id) },
+                        onDismiss = { dismissTarget = candidate.id }
                     )
                 }
             }
@@ -104,27 +104,28 @@ fun PendingScreen(
             onDismissRequest = { dismissTarget = null },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.dismissItem(id)
+                    vm.dismissCandidate(id)
                     dismissTarget = null
                 }) { Text("Dismiss") }
             },
             dismissButton = {
                 TextButton(onClick = { dismissTarget = null }) { Text("Cancel") }
             },
-            title = { Text("Dismiss this detection?") },
-            text = { Text("The source evidence is kept; it just leaves the review queue.") }
+            title = { Text("Dismiss this candidate?") },
+            text = { Text("All source evidence is kept; it just leaves the review queue.") }
         )
     }
 }
 
 @Composable
 private fun PendingCard(
-    item: PendingItem,
+    candidate: PendingCandidate,
     onConfirm: () -> Unit,
     onEdit: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val p = item.parsed
+    val primary = candidate.primary
+    val p = primary.parsed
     var showSource by remember { mutableStateOf(false) }
 
     val title = when (p.transactionKind) {
@@ -137,6 +138,7 @@ private fun PendingCard(
             }
     }
     val amountText = p.amountPesos?.let { Money.formatCop(it) } ?: "Amount unknown"
+    val extraCounterparties = candidate.counterparties.drop(1)
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -150,6 +152,13 @@ private fun PendingCard(
             Spacer(modifier = Modifier.height(4.dp))
             if (!p.counterparty.isNullOrBlank()) {
                 Text(p.counterparty, style = MaterialTheme.typography.bodyMedium)
+            }
+            extraCounterparties.forEach { cp ->
+                Text(
+                    "Also reported as: $cp",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             accountLine(p.sourceAccountHint, p.destinationAccountHint)?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall)
@@ -169,11 +178,17 @@ private fun PendingCard(
             Spacer(modifier = Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 AssistChip(onClick = {}, label = { Text(p.institution) })
+                if (candidate.isCorrelated) {
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("${candidate.members.size} sources · correlated") }
+                    )
+                }
                 AssistChip(
                     onClick = {},
                     label = {
                         Text(
-                            when (p.confidence) {
+                            when (candidate.headlineConfidence) {
                                 Confidence.HIGH -> "High confidence"
                                 Confidence.MEDIUM -> "Medium confidence"
                                 Confidence.LOW -> "Low confidence"
@@ -182,7 +197,7 @@ private fun PendingCard(
                     }
                 )
             }
-            p.warnings.forEach { warning ->
+            candidate.members.flatMap { it.parsed.warnings }.distinct().forEach { warning ->
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     warning,
@@ -191,18 +206,21 @@ private fun PendingCard(
                 )
             }
             TextButton(onClick = { showSource = !showSource }) {
-                Text(if (showSource) "Hide source" else "Show source")
+                Text(if (showSource) "Hide sources" else "Show sources (${candidate.members.size})")
             }
             if (showSource) {
-                Text(
-                    "${item.sourceEvent.sourceType} · ${item.sourceEvent.sourceIdentifier}",
-                    style = MaterialTheme.typography.labelMedium
-                )
-                Text(
-                    item.sourceEvent.rawContent,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                candidate.members.forEach { member ->
+                    Text(
+                        "${member.sourceEvent.sourceType} · ${member.sourceEvent.sourceIdentifier} · ${member.parsed.institution}",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Text(
+                        member.sourceEvent.rawContent,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
             }
             Spacer(modifier = Modifier.height(8.dp))
             // Editable description/tags live in the edit form (spec §16).

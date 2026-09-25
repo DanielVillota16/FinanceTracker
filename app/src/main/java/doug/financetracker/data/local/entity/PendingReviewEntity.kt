@@ -22,12 +22,15 @@ import androidx.room.PrimaryKey
     ],
     indices = [
         Index("sourceEventId"),
-        Index("status")
+        Index("status"),
+        Index("candidateId")
     ]
 )
 data class PendingReviewEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val sourceEventId: Long,
+    /** Owning logical candidate; intentionally no FK — evidence must survive. */
+    val candidateId: Long? = null,
     val amount: Long? = null,
     /** INCOMING | OUTGOING */
     val direction: String? = null,

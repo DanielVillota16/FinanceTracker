@@ -2,7 +2,7 @@ package doug.financetracker.ui.screens.pending
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import doug.financetracker.domain.model.PendingItem
+import doug.financetracker.domain.model.PendingCandidate
 import doug.financetracker.domain.repository.PendingReviewRepository
 import doug.financetracker.domain.usecase.ConfirmPendingItem
 import kotlinx.coroutines.channels.Channel
@@ -17,10 +17,11 @@ class PendingViewModel(
     private val confirm: ConfirmPendingItem
 ) : ViewModel() {
 
-    val items: StateFlow<List<PendingItem>> = pending.observePending()
+    val candidates: StateFlow<List<PendingCandidate>> = pending.observeCandidates()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     sealed interface Event {
+        /** Review id to open in the edit form (primary member of a candidate). */
         data class OpenEdit(val pendingId: Long) : Event
         data class Error(val message: String) : Event
     }
@@ -28,22 +29,27 @@ class PendingViewModel(
     private val eventChannel = Channel<Event>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
 
-    /** One-tap confirm; ambiguous items fall through to the edit form. */
-    fun confirmItem(id: Long) {
+    /**
+     * One-tap confirm of a candidate via its primary member; confirming links
+     * every member to the same transaction. Ambiguous items fall through to
+     * the edit form.
+     */
+    fun confirmCandidate(candidate: PendingCandidate) {
         viewModelScope.launch {
+            val primaryId = candidate.primary.id
             try {
-                confirm.confirm(id)
+                confirm.confirm(primaryId)
             } catch (_: ConfirmPendingItem.AmbiguousKind) {
-                eventChannel.send(Event.OpenEdit(id))
+                eventChannel.send(Event.OpenEdit(primaryId))
             } catch (_: ConfirmPendingItem.NeedsAccountSelection) {
-                eventChannel.send(Event.OpenEdit(id))
+                eventChannel.send(Event.OpenEdit(primaryId))
             } catch (e: Exception) {
                 eventChannel.send(Event.Error(e.message ?: "Could not confirm"))
             }
         }
     }
 
-    fun dismissItem(id: Long) {
-        viewModelScope.launch { pending.dismiss(id) }
+    fun dismissCandidate(candidateId: Long) {
+        viewModelScope.launch { pending.dismissCandidate(candidateId) }
     }
 }

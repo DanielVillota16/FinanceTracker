@@ -29,6 +29,30 @@ interface PendingReviewDao {
     @Query("SELECT * FROM pending_reviews WHERE sourceEventId = :sourceEventId AND status = 'PENDING' LIMIT 1")
     suspend fun findPendingForEvent(sourceEventId: Long): PendingReviewEntity?
 
+    /** Recent queue for correlation scoring (includes candidate links). */
+    @Transaction
+    @Query("SELECT * FROM pending_reviews WHERE status = 'PENDING' ORDER BY createdAt DESC, id DESC LIMIT :limit")
+    suspend fun findRecentPending(limit: Int): List<PendingReviewWithSource>
+
+    @Query("UPDATE pending_reviews SET candidateId = :candidateId WHERE id = :reviewId")
+    suspend fun setCandidate(reviewId: Long, candidateId: Long)
+
+    @Query("SELECT * FROM pending_reviews WHERE candidateId = :candidateId")
+    suspend fun getByCandidate(candidateId: Long): List<PendingReviewEntity>
+
+    /** Confirm every member of a candidate against the same transaction. */
+    @Query(
+        "UPDATE pending_reviews SET status = 'CONFIRMED', linkedTransactionId = :transactionId, " +
+            "updatedAt = :now WHERE candidateId = :candidateId AND status = 'PENDING'"
+    )
+    suspend fun confirmCandidateMembers(candidateId: Long, transactionId: Long, now: Long)
+
+    @Query(
+        "UPDATE pending_reviews SET status = 'DISMISSED', updatedAt = :now " +
+            "WHERE candidateId = :candidateId AND status = 'PENDING'"
+    )
+    suspend fun dismissCandidateMembers(candidateId: Long, now: Long)
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(review: PendingReviewEntity): Long
 

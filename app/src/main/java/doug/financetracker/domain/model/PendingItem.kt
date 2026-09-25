@@ -3,8 +3,9 @@ package doug.financetracker.domain.model
 import doug.financetracker.domain.parser.ParsedTransaction
 
 /**
- * One item in the Pending Review queue: a parser interpretation plus its
- * source evidence, awaiting explicit user confirmation.
+ * One member of the Pending Review queue: a parser interpretation plus its
+ * source evidence, awaiting explicit user confirmation. Members are grouped
+ * into [PendingCandidate]s; the grouping never deletes or merges rows.
  */
 data class PendingItem(
     val id: Long = 0L,
@@ -12,6 +13,7 @@ data class PendingItem(
     val parsed: ParsedTransaction,
     val status: PendingStatus = PendingStatus.PENDING,
     val linkedTransactionId: Long? = null,
+    val candidateId: Long? = null,
     val createdAt: Long = System.currentTimeMillis()
 )
 

@@ -72,6 +72,7 @@ fun PendingReviewEntity.toDomain(source: SourceEvent): PendingItem {
         status = runCatching { PendingStatus.valueOf(status) }
             .getOrDefault(PendingStatus.PENDING),
         linkedTransactionId = linkedTransactionId,
+        candidateId = candidateId,
         createdAt = createdAt
     )
 }
@@ -99,6 +100,7 @@ fun PendingItem.toEntity(): PendingReviewEntity {
         warnings = join(p.warnings),
         status = status.name,
         linkedTransactionId = linkedTransactionId,
+        candidateId = candidateId,
         createdAt = createdAt,
         updatedAt = System.currentTimeMillis()
     )

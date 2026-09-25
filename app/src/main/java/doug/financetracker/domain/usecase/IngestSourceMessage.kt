@@ -4,7 +4,10 @@ import androidx.room.withTransaction
 import doug.financetracker.data.ingest.SourceFingerprinter
 import doug.financetracker.data.local.database.FinanceDatabase
 import doug.financetracker.data.local.entity.SourceEventEntity
+import doug.financetracker.data.local.entity.TransactionCandidateEntity
+import doug.financetracker.data.local.mapper.toDomain
 import doug.financetracker.data.local.mapper.toEntity
+import doug.financetracker.domain.correlation.CandidateMerger
 import doug.financetracker.domain.model.ParsedStatus
 import doug.financetracker.domain.model.PendingItem
 import doug.financetracker.domain.model.SourceEvent
@@ -78,25 +81,56 @@ class IngestSourceMessage(
             result = if (parsed == null) {
                 Result.Unsupported(eventId)
             } else {
-                val pendingId = db.pendingReviewDao().findPendingForEvent(eventId)?.id
+                val newItem = PendingItem(
+                    sourceEvent = SourceEvent(
+                        id = eventId,
+                        sourceType = sourceType,
+                        sourceIdentifier = sourceIdentifier,
+                        receivedAt = receivedAt,
+                        eventTime = eventTime,
+                        rawContent = rawContent,
+                        fingerprint = fingerprint,
+                        parsedStatus = ParsedStatus.PARSED
+                    ),
+                    parsed = parsed
+                )
+                val existingPending = db.pendingReviewDao().findPendingForEvent(eventId)
+                val pendingId = existingPending?.id
                     ?: db.pendingReviewDao().insert(
-                        PendingItem(
-                            sourceEvent = SourceEvent(
-                                id = eventId,
-                                sourceType = sourceType,
-                                sourceIdentifier = sourceIdentifier,
-                                receivedAt = receivedAt,
-                                eventTime = eventTime,
-                                rawContent = rawContent,
-                                fingerprint = fingerprint,
-                                parsedStatus = ParsedStatus.PARSED
-                            ),
-                            parsed = parsed
-                        ).toEntity().copy(sourceEventId = eventId)
+                        newItem.toEntity().copy(sourceEventId = eventId)
                     )
+                if (existingPending == null) {
+                    correlate(pendingId, newItem)
+                }
                 Result.Created(pendingId)
             }
         }
         return result
+    }
+
+    /**
+     * Purchase correlation: join an existing candidate when the evidence says
+     * "same physical purchase", else start a solo candidate. Order-independent
+     * — the second arrival joins the first either way. Weak evidence stays
+     * separate for the user. Must be called inside the ingest transaction.
+     */
+    private suspend fun correlate(pendingId: Long, newItem: PendingItem) {
+        val recent = db.pendingReviewDao().findRecentPending(CORRELATION_LOOKBACK)
+            .filter { it.review.id != pendingId }
+            .mapNotNull { row ->
+                val candidateId = row.review.candidateId ?: return@mapNotNull null
+                row.review.toDomain(row.source.toDomain()) to candidateId
+            }
+        val candidateId = when (val merge = CandidateMerger.decide(recent, newItem)) {
+            is CandidateMerger.Decision.Join -> merge.candidateId
+            CandidateMerger.Decision.NewCandidate ->
+                db.transactionCandidateDao().insert(TransactionCandidateEntity())
+        }
+        db.pendingReviewDao().setCandidate(pendingId, candidateId)
+    }
+
+    companion object {
+        /** Queue depth scanned for correlation partners (single-user scale). */
+        const val CORRELATION_LOOKBACK = 100
     }
 }

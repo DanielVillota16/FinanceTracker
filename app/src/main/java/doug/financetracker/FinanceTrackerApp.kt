@@ -37,7 +37,7 @@ class AppContainer(app: Application) {
         accountDao = db.accountDao()
     )
     val sourceEventRepository = RoomSourceEventRepository(db.sourceEventDao())
-    val pendingReviewRepository = RoomPendingReviewRepository(db.pendingReviewDao())
+    val pendingReviewRepository = RoomPendingReviewRepository(db)
 
     val observeTransactionDetails = ObserveTransactionDetails(transactionRepository)
     val createTransaction = CreateTransaction(transactionRepository)
