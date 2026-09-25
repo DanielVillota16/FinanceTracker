@@ -45,14 +45,15 @@ class IngestSourceMessage(
         db.sourceEventDao().getByFingerprint(fingerprint)?.let {
             return Result.Duplicate(it.id)
         }
-        // Notifications are interpreted by package-scoped parsers first; the
-        // generic SMS registry is only a fallback. Separate registries keep
-        // SMS and notification patterns from claiming each other (Phase 4).
+        // SMS routing is sender-aware first: the sender id is ground truth
+        // (a Bancolombia SMS naming Davivienda must not route to Davibank).
+        // Unknown senders fall back to text-only matching. Notifications keep
+        // their package-based registry with the SMS registry as fallback.
         val parsed = if (sourceType == "NOTIFICATION") {
             NotificationParserRegistry.parse(sourceIdentifier, rawContent)
                 ?: ParserRegistry.parse(rawContent)
         } else {
-            ParserRegistry.parse(rawContent)
+            ParserRegistry.parse(rawContent, sender = sourceIdentifier)
         }
         lateinit var result: Result
         db.withTransaction {

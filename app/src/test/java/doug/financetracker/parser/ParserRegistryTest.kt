@@ -43,4 +43,39 @@ class ParserRegistryTest {
         assertNull(ParserRegistry.parse("Tu paquete ha sido enviado."))
         assertNull(ParserRegistry.parserFor("BBVA: pago de tarjeta por \$100.000"))
     }
+
+    @Test
+    fun `sender routing maps known sender ids`() {
+        assertTrue(ParserRegistry.parserForSender("Bancolombia") is BancolombiaParser)
+        assertTrue(ParserRegistry.parserForSender("85540") is BancolombiaParser)
+        assertTrue(ParserRegistry.parserForSender("Nequi") is NequiParser)
+        assertTrue(ParserRegistry.parserForSender("Daviplata") is DavibankParser)
+        assertNull(ParserRegistry.parserForSender("co.com.bbva.mb"))
+        assertNull(ParserRegistry.parserForSender("+5785540"))
+        assertNull(ParserRegistry.parserForSender(""))
+    }
+
+    @Test
+    fun `sender wins over misleading body text`() {
+        // Production case: Bancolombia SMS naming Davivienda must not route
+        // to Davibank — the sender id is ground truth.
+        val body = "Bancolombia: Pagaste \$975,500.00 a Banco Davivienda S A Zona Pa " +
+            "desde tu producto 8494 el 23/09/2026 17:32:32. Estamos cerca"
+        val parsed = ParserRegistry.parse(body, sender = "85540")
+        assertNotNull(parsed)
+        assertEquals("Bancolombia", parsed!!.institution)
+        assertEquals(975_500L, parsed.amountPesos)
+        assertEquals("Banco Davivienda S A Zona Pa", parsed.counterparty)
+        assertEquals("8494", parsed.sourceAccountHint?.lastDigits)
+        assertEquals(TransactionKind.UNKNOWN, parsed.transactionKind)
+    }
+
+    @Test
+    fun `unknown sender falls back to text routing`() {
+        val body = "Bancolombia: Pagaste \$975,500.00 a Banco Davivienda S A Zona Pa " +
+            "desde tu producto 8494 el 23/09/2026 17:32:32. Estamos cerca"
+        val parsed = ParserRegistry.parse(body, sender = "99999")
+        assertNotNull(parsed)
+        assertEquals("Bancolombia", parsed!!.institution)
+    }
 }

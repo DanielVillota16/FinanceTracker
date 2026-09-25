@@ -40,6 +40,41 @@ class BancolombiaParserTest {
     }
 
     @Test
+    fun `real pay-to-bank transfer parses as ambiguous with counterparty`() {
+        // Verbatim production SMS: destination bank named in the text.
+        val result = parser.parse(
+            "Bancolombia: Pagaste \$975,500.00 a Banco Davivienda S A Zona Pa " +
+                "desde tu producto 8494 el 23/09/2026 17:32:32. ¿Dudas? Llamanos al 6045109095. Estamos cerca"
+        )
+        assertNotNull(result)
+        assertEquals(975_500L, result!!.amountPesos)
+        assertEquals(Direction.OUTGOING, result.direction)
+        assertEquals(TransactionKind.UNKNOWN, result.transactionKind)
+        assertEquals(listOf(TransactionKind.TRANSFER, TransactionKind.EXPENSE), result.possibleKinds)
+        assertEquals("Bancolombia", result.institution)
+        assertEquals("Banco Davivienda S A Zona Pa", result.counterparty)
+        assertEquals("8494", result.sourceAccountHint?.lastDigits)
+        assertEquals(
+            java.time.LocalDateTime.of(2026, 9, 23, 17, 32, 32)
+                .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            result.timestampMillis
+        )
+        assertEquals(Confidence.MEDIUM, result.confidence)
+        assertTrue(result.warnings.any { it.contains("ownership") })
+    }
+
+    @Test
+    fun `transfer out accepts producto wording`() {
+        val result = parser.parse(
+            "Bancolombia: Transferiste \$4,500.00 desde tu producto *8494 el 22/09/2026 a las 10:02."
+        )
+        assertNotNull(result)
+        assertEquals(4_500L, result!!.amountPesos)
+        assertEquals(TransactionKind.UNKNOWN, result.transactionKind)
+        assertEquals("8494", result.sourceAccountHint?.lastDigits)
+    }
+
+    @Test
     fun `purchase produces expense with counterparty and account hint`() {
         val result = parser.parse(
             "Compraste \$29.000,00 en BOLD SA*20 DE JU con tu T.Deb *0757 el 21/09/2026 a las 08:27."

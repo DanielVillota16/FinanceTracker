@@ -6,6 +6,7 @@ package doug.financetracker.domain.parser
  * Supported shapes (amounts/counterparties/dates vary):
  * - Purchase:       "Compraste $29.000,00 en BOLD SA*20 DE JU con tu T.Deb *0757 ..."
  * - Transfer out:   "Transferiste $4,500.00 desde tu cuenta *8494 ..."
+ * - Transfer pay:   "Pagaste $975,500.00 a Banco Davivienda S A Zona Pa desde tu producto 8494 ..."
  * - BRE-B:          "Transferiste $60,000.00 a la llave <alias> ..."
  * - QR payment:     "Pagaste $40,000.00 por codigo QR [en <merchant>] ..."
  * - ATM withdrawal: "Retiraste $100.000,00 en <ATM_ID> [con tu T.Deb *0757] ..."
@@ -22,7 +23,10 @@ class BancolombiaParser : TransactionParser {
     private val purchaseRx =
         Regex("""compraste\s+\$?\s*([\d.,]+)\s+en\s+(.+?)\s+con tu\s+(.+?)(?:\s+el\s+|\s*$|\.)""", RegexOption.IGNORE_CASE)
     private val transferOutRx =
-        Regex("""transferiste\s+\$?\s*([\d.,]+)\s+desde tu cuenta\s+\*(\d{3,6})(.*)""", RegexOption.IGNORE_CASE)
+        Regex("""transferiste\s+\$?\s*([\d.,]+)\s+desde tu (?:cuenta|producto)\s+\*?(\d{3,6})(.*)""", RegexOption.IGNORE_CASE)
+    /** Real shape: "Pagaste $975,500.00 a Banco Davivienda S A Zona Pa desde tu producto 8494 ..." */
+    private val transferPayRx =
+        Regex("""pagaste\s+\$?\s*([\d.,]+)\s+a\s+(.+?)\s+desde tu (?:cuenta|producto)\s+\*?(\d{3,6})""", RegexOption.IGNORE_CASE)
     private val brebRx =
         Regex("""transferiste\s+\$?\s*([\d.,]+)\s+a\s+la\s+llave\s+(\S+)(.*)""", RegexOption.IGNORE_CASE)
     private val destinationAccountRx =
@@ -43,6 +47,7 @@ class BancolombiaParser : TransactionParser {
         val lower = raw.lowercase()
         return purchaseRx.containsMatchIn(lower) ||
             transferOutRx.containsMatchIn(lower) ||
+            transferPayRx.containsMatchIn(lower) ||
             brebRx.containsMatchIn(lower) ||
             atmRx.containsMatchIn(lower) ||
             billRx.containsMatchIn(lower) ||
@@ -58,6 +63,7 @@ class BancolombiaParser : TransactionParser {
         parsePurchase(raw, timestamp, warnings)?.let { return it }
         parseTransferOut(raw, timestamp, warnings)?.let { return it }
         parseBreb(raw, timestamp, warnings)?.let { return it }
+        parseTransferPay(raw, timestamp, warnings)?.let { return it }
         parseQr(raw, timestamp, warnings)?.let { return it }
         parseAtm(raw, timestamp, warnings)?.let { return it }
         parseBill(raw, timestamp, warnings)?.let { return it }
@@ -132,8 +138,7 @@ class BancolombiaParser : TransactionParser {
             reference = null, warnings = warnings)
     }
 
-    private fun parseTransferOut(raw: String, timestamp: Long?, warnings: MutableList<String>): ParsedTransaction? {
-        val m = transferOutRx.find(raw) ?: return null
+    private fun parseTransferOut(raw: String, timestamp: Long?, warnings: MutableList<String>): ParsedTransaction? {        val m = transferOutRx.find(raw) ?: return null
         val amount = CopAmountParser.parse(m.groupValues[1])
         val source = AccountHint(lastDigits = m.groupValues[2])
         val tail = m.groupValues[3]
@@ -173,6 +178,20 @@ class BancolombiaParser : TransactionParser {
             possible = listOf(TransactionKind.TRANSFER, TransactionKind.EXPENSE),
             source = source, dest = null, counterparty = null, timestamp = timestamp,
             reference = llave.ifEmpty { null }, warnings = warnings)
+    }
+
+    private fun parseTransferPay(raw: String, timestamp: Long?, warnings: MutableList<String>): ParsedTransaction? {
+        val m = transferPayRx.find(raw) ?: return null
+        val amount = CopAmountParser.parse(m.groupValues[1])
+        val counterparty = ParserUtils.cleanCounterparty(m.groupValues[2])
+        val source = AccountHint(lastDigits = m.groupValues[3])
+        if (counterparty == null) warnings += "Transfer destination could not be identified."
+        warnings += "Destination \"${counterparty ?: "unknown"}\" ownership is unknown; " +
+            "confirm whether this is an internal transfer or an expense."
+        return base(amount, Direction.OUTGOING, TransactionKind.UNKNOWN,
+            possible = listOf(TransactionKind.TRANSFER, TransactionKind.EXPENSE),
+            source = source, dest = null, counterparty = counterparty,
+            timestamp = timestamp, reference = null, warnings = warnings)
     }
 
     private fun parseQr(raw: String, timestamp: Long?, warnings: MutableList<String>): ParsedTransaction? {
