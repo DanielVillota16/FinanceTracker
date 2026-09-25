@@ -73,7 +73,7 @@ fun FinanceTrackerRoot() {
     androidx.compose.runtime.LaunchedEffect(Unit) {
         try {
             (context.applicationContext as? FinanceTrackerApp)?.container?.syncEngine?.syncNow()
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
         }
     }
 

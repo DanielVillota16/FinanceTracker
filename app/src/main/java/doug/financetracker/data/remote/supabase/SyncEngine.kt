@@ -50,7 +50,9 @@ class SyncEngine(
         _status.value = Status.Syncing
         _status.value = try {
             run()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Throwable, not Exception: backend init failures (e.g. a missing
+            // HTTP engine) surface as Errors, and sync must never crash the app.
             Status.Error(e.message ?: "Sync failed.")
         }
     }
