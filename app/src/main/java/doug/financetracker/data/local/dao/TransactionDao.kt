@@ -18,6 +18,13 @@ interface TransactionDao {
     fun observeAllWithTags(): Flow<List<TransactionWithTags>>
 
     @Transaction
+    @Query("SELECT * FROM transactions ORDER BY dateTime DESC, id DESC")
+    suspend fun getAllWithTags(): List<TransactionWithTags>
+
+    @Query("SELECT * FROM transactions WHERE remoteId = :remoteId LIMIT 1")
+    suspend fun getByRemoteId(remoteId: String): TransactionEntity?
+
+    @Transaction
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getWithTags(id: Long): TransactionWithTags?
 

@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import doug.financetracker.data.local.entity.TagEntity
 import doug.financetracker.data.local.entity.TransactionTagCrossRef
 import kotlinx.coroutines.flow.Flow
@@ -20,8 +21,17 @@ interface TagDao {
     @Query("SELECT * FROM tags WHERE name = :name COLLATE NOCASE LIMIT 1")
     suspend fun getByName(name: String): TagEntity?
 
+    @Query("SELECT * FROM tags WHERE remoteId = :remoteId LIMIT 1")
+    suspend fun getByRemoteId(remoteId: String): TagEntity?
+
+    @Query("SELECT * FROM tags WHERE id = :id")
+    suspend fun getById(id: Long): TagEntity?
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(tag: TagEntity): Long
+
+    @Update
+    suspend fun update(tag: TagEntity)
 
     @Delete
     suspend fun delete(tag: TagEntity)

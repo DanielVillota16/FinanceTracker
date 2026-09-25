@@ -8,12 +8,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import doug.financetracker.data.local.dao.AccountDao
 import doug.financetracker.data.local.dao.PendingReviewDao
 import doug.financetracker.data.local.dao.SourceEventDao
+import doug.financetracker.data.local.dao.SyncTombstoneDao
 import doug.financetracker.data.local.dao.TagDao
 import doug.financetracker.data.local.dao.TransactionCandidateDao
 import doug.financetracker.data.local.dao.TransactionDao
 import doug.financetracker.data.local.entity.AccountEntity
 import doug.financetracker.data.local.entity.PendingReviewEntity
 import doug.financetracker.data.local.entity.SourceEventEntity
+import doug.financetracker.data.local.entity.SyncTombstoneEntity
 import doug.financetracker.data.local.entity.TagEntity
 import doug.financetracker.data.local.entity.TransactionCandidateEntity
 import doug.financetracker.data.local.entity.TransactionEntity
@@ -28,9 +30,10 @@ import java.util.concurrent.Executors
         TransactionTagCrossRef::class,
         SourceEventEntity::class,
         PendingReviewEntity::class,
-        TransactionCandidateEntity::class
+        TransactionCandidateEntity::class,
+        SyncTombstoneEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class FinanceDatabase : RoomDatabase() {
@@ -40,6 +43,7 @@ abstract class FinanceDatabase : RoomDatabase() {
     abstract fun sourceEventDao(): SourceEventDao
     abstract fun pendingReviewDao(): PendingReviewDao
     abstract fun transactionCandidateDao(): TransactionCandidateDao
+    abstract fun syncTombstoneDao(): SyncTombstoneDao
 
     companion object {
         @Volatile
@@ -80,8 +84,8 @@ abstract class FinanceDatabase : RoomDatabase() {
                     )
                     for ((name, institution, type) in defaults) {
                         db.execSQL(
-                            "INSERT INTO accounts (name, institution, accountType, identifierSuffix, isOwnedByUser, createdAt) VALUES (?, ?, ?, '', 1, ?)",
-                            arrayOf(name, institution, type, now)
+                            "INSERT INTO accounts (name, institution, accountType, identifierSuffix, isOwnedByUser, createdAt, syncStatus, updatedAt) VALUES (?, ?, ?, '', 1, ?, 'PENDING_UPLOAD', ?)",
+                            arrayOf(name, institution, type, now, now)
                         )
                     }
                 }

@@ -4,6 +4,7 @@ import android.app.Application
 import doug.financetracker.data.local.database.FinanceDatabase
 import doug.financetracker.data.remote.supabase.AuthRepository
 import doug.financetracker.data.remote.supabase.SupabaseProvider
+import doug.financetracker.data.remote.supabase.SyncEngine
 import doug.financetracker.data.repository.RoomAccountRepository
 import doug.financetracker.data.repository.RoomPendingReviewRepository
 import doug.financetracker.data.repository.RoomSourceEventRepository
@@ -30,8 +31,8 @@ class FinanceTrackerApp : Application() {
 class AppContainer(app: Application) {
     private val db: FinanceDatabase = FinanceDatabase.get(app)
 
-    val accountRepository = RoomAccountRepository(db.accountDao())
-    val tagRepository = RoomTagRepository(db.tagDao())
+    val accountRepository = RoomAccountRepository(db)
+    val tagRepository = RoomTagRepository(db)
     val transactionRepository = RoomTransactionRepository(
         db = db,
         transactionDao = db.transactionDao(),
@@ -43,6 +44,7 @@ class AppContainer(app: Application) {
 
     val supabaseProvider = SupabaseProvider()
     val authRepository = AuthRepository(supabaseProvider)
+    val syncEngine = SyncEngine(db, supabaseProvider, authRepository)
 
     val observeTransactionDetails = ObserveTransactionDetails(transactionRepository)
     val createTransaction = CreateTransaction(transactionRepository)

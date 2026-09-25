@@ -55,7 +55,7 @@ fun SettingsScreen(
         factory = vmFactory {
             val c = appContainer(context)
             val app = context.applicationContext as FinanceTrackerApp
-            SettingsViewModel(app, c.accountRepository, c.tagRepository, c.ingestSourceMessage, c.authRepository)
+            SettingsViewModel(app, c.accountRepository, c.tagRepository, c.ingestSourceMessage, c.authRepository, c.syncEngine)
         }
     )
     val state by vm.state.collectAsStateWithLifecycle()
@@ -66,6 +66,7 @@ fun SettingsScreen(
     val authSession by vm.authSession.collectAsStateWithLifecycle()
     val authBusy by vm.authBusy.collectAsStateWithLifecycle()
     val authError by vm.authError.collectAsStateWithLifecycle()
+    val syncStatus by vm.syncStatus.collectAsStateWithLifecycle()
     var showAddAccount by remember { mutableStateOf(false) }
 
     val smsPermissionLauncher = rememberLauncherForActivityResult(
@@ -187,6 +188,14 @@ fun SettingsScreen(
                 onSignOut = vm::signOut,
                 onClearError = vm::clearAuthError
             )
+        }
+        if (vm.authConfigured && authSession != null) {
+            item {
+                SyncCard(
+                    status = syncStatus,
+                    onSyncNow = vm::syncNow
+                )
+            }
         }
         item {
             IngestTestCard(
@@ -351,6 +360,55 @@ private fun SupabaseAuthCard(
                 }
                 TextButton(enabled = !busy, onClick = onSignOut) { Text("Sign out") }
             }
+        }
+    }
+}
+
+@Composable
+private fun SyncCard(
+    status: doug.financetracker.data.remote.supabase.SyncEngine.Status,
+    onSyncNow: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Backup sync", style = MaterialTheme.typography.titleMedium)
+            val message = when (status) {
+                doug.financetracker.data.remote.supabase.SyncEngine.Status.Idle ->
+                    "Sync has not run yet on this device."
+                doug.financetracker.data.remote.supabase.SyncEngine.Status.NotConfigured ->
+                    "Sync is not configured on this build."
+                doug.financetracker.data.remote.supabase.SyncEngine.Status.SignedOut ->
+                    "Sign in to sync."
+                doug.financetracker.data.remote.supabase.SyncEngine.Status.Syncing ->
+                    "Syncing…"
+                is doug.financetracker.data.remote.supabase.SyncEngine.Status.Success ->
+                    "Last sync: ${status.pushed} pushed · ${status.pulled} pulled" +
+                        if (status.errors > 0) " · ${status.errors} errors (will retry)" else " · no errors"
+                is doug.financetracker.data.remote.supabase.SyncEngine.Status.Error ->
+                    "Sync failed: ${status.message} — local data is untouched."
+            }
+            Text(
+                message,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (status is doug.financetracker.data.remote.supabase.SyncEngine.Status.Error) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+            Text(
+                "Only transactions, accounts and tags sync. " +
+                    "Source messages never leave this device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(
+                enabled = status != doug.financetracker.data.remote.supabase.SyncEngine.Status.Syncing,
+                onClick = onSyncNow
+            ) { Text("Sync now") }
         }
     }
 }

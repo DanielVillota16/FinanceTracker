@@ -11,7 +11,11 @@ data class Account(
     val accountType: String = "",
     val identifierSuffix: String = "",
     val isOwnedByUser: Boolean = true,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** Remote backup/sync metadata (Phase 7). Null until first upload. */
+    val remoteId: String? = null,
+    val syncStatus: SyncStatus = SyncStatus.PENDING_UPLOAD,
+    val updatedAt: Long = System.currentTimeMillis()
 ) {
     val displayLabel: String
         get() = if (identifierSuffix.isBlank()) name else "$name ****$identifierSuffix"

@@ -66,6 +66,16 @@ fun FinanceTrackerRoot() {
     val backStack by navController.currentBackStackEntryAsState()
     val currentDestination = backStack?.destination
     val snackbar = remember { SnackbarHostState() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Best-effort backup sync on start. No-ops when unconfigured, signed out,
+    // or offline — the app never depends on it.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        try {
+            (context.applicationContext as? FinanceTrackerApp)?.container?.syncEngine?.syncNow()
+        } catch (_: Exception) {
+        }
+    }
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {

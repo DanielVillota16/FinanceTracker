@@ -31,7 +31,8 @@ class SettingsViewModel(
     private val accounts: AccountRepository,
     private val tags: TagRepository,
     private val ingest: IngestSourceMessage,
-    private val auth: doug.financetracker.data.remote.supabase.AuthRepository
+    private val auth: doug.financetracker.data.remote.supabase.AuthRepository,
+    private val sync: doug.financetracker.data.remote.supabase.SyncEngine
 ) : ViewModel() {
 
     val state: StateFlow<SettingsUiState> = combine(
@@ -187,5 +188,14 @@ class SettingsViewModel(
             }
             _authBusy.value = false
         }
+    }
+
+    // Sync status (Phase 7) -------------------------------------------------
+
+    val syncStatus: StateFlow<doug.financetracker.data.remote.supabase.SyncEngine.Status> =
+        sync.status
+
+    fun syncNow() {
+        viewModelScope.launch { sync.syncNow() }
     }
 }

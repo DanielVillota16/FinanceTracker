@@ -87,8 +87,16 @@ class RoomTransactionRepository(
     }
 
     override suspend fun delete(id: Long) {
-        // Hard delete locally for Phase 1 (sync tombstones arrive with Phase 7).
         db.withTransaction {
+            // Remember the remote row so sync can replay the delete offline-safe.
+            transactionDao.getById(id)?.remoteId?.let { remoteId ->
+                db.syncTombstoneDao().insert(
+                    doug.financetracker.data.local.entity.SyncTombstoneEntity(
+                        tableName = "transactions",
+                        remoteId = remoteId
+                    )
+                )
+            }
             tagDao.unlinkAll(id)
             transactionDao.deleteById(id)
         }

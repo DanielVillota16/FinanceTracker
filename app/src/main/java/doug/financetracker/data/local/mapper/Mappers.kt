@@ -16,7 +16,11 @@ fun AccountEntity.toDomain() = Account(
     accountType = accountType,
     identifierSuffix = identifierSuffix,
     isOwnedByUser = isOwnedByUser,
-    createdAt = createdAt
+    createdAt = createdAt,
+    remoteId = remoteId,
+    syncStatus = runCatching { SyncStatus.valueOf(syncStatus) }
+        .getOrDefault(SyncStatus.PENDING_UPLOAD),
+    updatedAt = updatedAt
 )
 
 fun Account.toEntity() = AccountEntity(
@@ -26,7 +30,10 @@ fun Account.toEntity() = AccountEntity(
     accountType = accountType,
     identifierSuffix = identifierSuffix,
     isOwnedByUser = isOwnedByUser,
-    createdAt = createdAt
+    createdAt = createdAt,
+    remoteId = remoteId,
+    syncStatus = syncStatus.name,
+    updatedAt = updatedAt
 )
 
 fun TransactionEntity.toDomain(tagIds: List<Long> = emptyList()) = Transaction(
@@ -64,11 +71,18 @@ fun Transaction.toEntity() = TransactionEntity(
 fun TagEntity.toDomain() = Tag(
     id = id,
     name = name,
-    createdAt = createdAt
+    createdAt = createdAt,
+    remoteId = remoteId,
+    syncStatus = runCatching { SyncStatus.valueOf(syncStatus) }
+        .getOrDefault(SyncStatus.PENDING_UPLOAD),
+    updatedAt = updatedAt
 )
 
 fun Tag.toEntity() = TagEntity(
     id = id,
     name = name,
-    createdAt = createdAt
+    createdAt = createdAt,
+    remoteId = remoteId,
+    syncStatus = syncStatus.name,
+    updatedAt = updatedAt
 )
