@@ -128,7 +128,10 @@ private fun PendingCard(
     val p = primary.parsed
     var showSource by remember { mutableStateOf(false) }
 
-    val title = when (p.transactionKind) {
+    val isTransfer = candidate.suggestedKind == TransactionKind.TRANSFER
+    val title = if (isTransfer) {
+        "Transfer"
+    } else when (p.transactionKind) {
         TransactionKind.EXPENSE -> "Expense"
         TransactionKind.INCOME -> "Income"
         TransactionKind.TRANSFER -> "Transfer"
@@ -163,6 +166,15 @@ private fun PendingCard(
             accountLine(p.sourceAccountHint, p.destinationAccountHint)?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall)
             }
+            if (isTransfer) {
+                transferLine(candidate)?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
             Text(
                 p.timestampMillis?.let { formatDateTime(it) } ?: "Date unknown",
                 style = MaterialTheme.typography.bodySmall,
@@ -178,7 +190,9 @@ private fun PendingCard(
             Spacer(modifier = Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 AssistChip(onClick = {}, label = { Text(p.institution) })
-                if (candidate.isCorrelated) {
+                if (isTransfer) {
+                    AssistChip(onClick = {}, label = { Text("transfer match") })
+                } else if (candidate.isCorrelated) {
                     AssistChip(
                         onClick = {},
                         label = { Text("${candidate.members.size} sources · correlated") }
@@ -231,6 +245,16 @@ private fun PendingCard(
             }
         }
     }
+}
+
+private fun transferLine(candidate: PendingCandidate): String? {
+    val outgoing = candidate.members.firstOrNull {
+        it.parsed.direction == doug.financetracker.domain.parser.Direction.OUTGOING
+    } ?: return null
+    val incoming = candidate.members.firstOrNull {
+        it.parsed.direction == doug.financetracker.domain.parser.Direction.INCOMING
+    } ?: return null
+    return accountLine(outgoing.parsed.sourceAccountHint, incoming.parsed.destinationAccountHint)
 }
 
 private fun accountLine(source: AccountHint?, dest: AccountHint?): String? {

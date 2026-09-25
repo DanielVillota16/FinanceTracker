@@ -1,6 +1,7 @@
 package doug.financetracker.domain.model
 
 import doug.financetracker.domain.parser.Confidence
+import doug.financetracker.domain.parser.TransactionKind
 
 /**
  * One logical transaction under review with all its source evidence.
@@ -13,6 +14,8 @@ data class PendingCandidate(
     val members: List<PendingItem>,
     val primary: PendingItem,
     val status: PendingStatus = PendingStatus.PENDING,
+    /** TRANSFER when a transfer pair was matched; null = purchase/default. */
+    val suggestedKind: TransactionKind? = null,
     val createdAt: Long = System.currentTimeMillis()
 ) {
     init {

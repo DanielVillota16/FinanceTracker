@@ -1,10 +1,11 @@
 package doug.financetracker.domain.usecase
 
-import doug.financetracker.domain.model.Account
+import doug.financetracker.domain.correlation.AccountResolver
+import doug.financetracker.domain.model.PendingCandidate
 import doug.financetracker.domain.model.PendingStatus
 import doug.financetracker.domain.model.Transaction
 import doug.financetracker.domain.model.TransactionType
-import doug.financetracker.domain.parser.AccountHint
+import doug.financetracker.domain.parser.Direction
 import doug.financetracker.domain.parser.TransactionKind
 import doug.financetracker.domain.repository.AccountRepository
 import doug.financetracker.domain.repository.PendingReviewRepository
@@ -33,6 +34,13 @@ class ConfirmPendingItem(
         val item = pendingRepo.getItem(pendingId)
             ?: throw IllegalArgumentException("Pending item $pendingId not found")
         require(item.status == PendingStatus.PENDING) { "Item is no longer pending" }
+        // Transfer candidates confirm as one TRANSFER built from both legs.
+        // Anything unresolvable falls through to single-snapshot logic, which
+        // routes to the edit form instead of guessing.
+        val candidate = pendingRepo.getCandidateForReview(pendingId)
+        if (candidate != null && candidate.suggestedKind == TransactionKind.TRANSFER) {
+            confirmTransfer(candidate)?.let { return it }
+        }
         val parsed = item.parsed
         val amount = parsed.amountPesos
             ?: throw IllegalStateException("Cannot confirm without a parsed amount")
@@ -43,7 +51,7 @@ class ConfirmPendingItem(
 
         val transaction = when (parsed.transactionKind) {
             doug.financetracker.domain.parser.TransactionKind.EXPENSE -> {
-                val source = resolve(parsed.sourceAccountHint, allAccounts)
+                val source = AccountResolver.resolve(parsed.sourceAccountHint, allAccounts)
                     ?: throw NeedsAccountSelection("Select the source account for this expense.")
                 Transaction(
                     type = TransactionType.EXPENSE,
@@ -54,7 +62,7 @@ class ConfirmPendingItem(
                 )
             }
             TransactionKind.INCOME -> {
-                val dest = resolve(parsed.destinationAccountHint, allAccounts)
+                val dest = AccountResolver.resolve(parsed.destinationAccountHint, allAccounts)
                     ?: throw NeedsAccountSelection("Select the destination account for this income.")
                 Transaction(
                     type = TransactionType.INCOME,
@@ -65,9 +73,9 @@ class ConfirmPendingItem(
                 )
             }
             TransactionKind.TRANSFER -> {
-                val source = resolve(parsed.sourceAccountHint, allAccounts)
+                val source = AccountResolver.resolve(parsed.sourceAccountHint, allAccounts)
                     ?: throw NeedsAccountSelection("Select the source account for this transfer.")
-                val dest = resolve(parsed.destinationAccountHint, allAccounts)
+                val dest = AccountResolver.resolve(parsed.destinationAccountHint, allAccounts)
                     ?: throw NeedsAccountSelection("Select the destination account for this transfer.")
                 Transaction(
                     type = TransactionType.TRANSFER,
@@ -86,22 +94,41 @@ class ConfirmPendingItem(
         return transactionId
     }
 
-    private fun resolve(hint: AccountHint?, allAccounts: List<Account>): Account? {
-        if (hint == null) return null
-        if (hint.isCash) {
-            return allAccounts.firstOrNull { it.accountType == "CASH" }
-                ?: allAccounts.firstOrNull { it.name.equals("Cash", ignoreCase = true) }
+    /**
+     * Builds one TRANSFER from a matched pair's legs. Returns null when the
+     * legs cannot be identified (caller falls back to single-snapshot logic);
+     * throws [NeedsAccountSelection] when accounts don't resolve.
+     */
+    private suspend fun confirmTransfer(candidate: PendingCandidate): Long? {
+        val outgoing = candidate.members.firstOrNull { it.parsed.direction == Direction.OUTGOING }
+            ?: return null
+        val incoming = candidate.members.firstOrNull { it.parsed.direction == Direction.INCOMING }
+            ?: return null
+        val amount = outgoing.parsed.amountPesos ?: incoming.parsed.amountPesos ?: return null
+        val allAccounts = accounts.getAll()
+        val source = AccountResolver.resolve(outgoing.parsed.sourceAccountHint, allAccounts)
+            ?: throw NeedsAccountSelection("Select the source account for this transfer.")
+        val dest = AccountResolver.resolve(incoming.parsed.destinationAccountHint, allAccounts)
+            ?: throw NeedsAccountSelection("Select the destination account for this transfer.")
+        if (source.id == dest.id) {
+            throw NeedsAccountSelection("Transfer accounts must differ; resolve in the edit form.")
         }
-        if (hint.lastDigits.isNotEmpty()) {
-            allAccounts.firstOrNull { it.identifierSuffix == hint.lastDigits }?.let { return it }
-        }
-        // Label-only hints (e.g. "Nequi") match by institution or account name.
-        hint.label?.takeIf { it.isNotBlank() }?.let { label ->
-            allAccounts.firstOrNull {
-                it.institution.equals(label, ignoreCase = true) ||
-                    it.name.equals(label, ignoreCase = true)
-            }?.let { return it }
-        }
-        return null
+        val dateTime = outgoing.parsed.timestampMillis
+            ?: outgoing.sourceEvent.eventTime
+            ?: incoming.parsed.timestampMillis
+            ?: incoming.sourceEvent.eventTime
+            ?: outgoing.sourceEvent.receivedAt
+        val transactionId = transactions.create(
+            Transaction(
+                type = TransactionType.TRANSFER,
+                amount = amount,
+                dateTime = dateTime,
+                sourceAccountId = source.id,
+                destinationAccountId = dest.id
+            )
+        )
+        // Confirming the primary links every member to the same transaction.
+        pendingRepo.confirm(candidate.primary.id, transactionId)
+        return transactionId
     }
 }

@@ -21,4 +21,10 @@ interface TransactionCandidateDao {
 
     @Query("SELECT * FROM transaction_candidates WHERE status = 'PENDING' ORDER BY createdAt DESC, id DESC")
     fun observePending(): Flow<List<TransactionCandidateEntity>>
+
+    @Query(
+        "UPDATE transaction_candidates SET suggestedKind = 'TRANSFER', updatedAt = :now " +
+            "WHERE id = :candidateId"
+    )
+    suspend fun markTransfer(candidateId: Long, now: Long)
 }

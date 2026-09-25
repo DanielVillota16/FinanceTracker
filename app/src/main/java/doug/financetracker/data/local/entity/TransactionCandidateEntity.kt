@@ -23,6 +23,12 @@ data class TransactionCandidateEntity(
     /** PENDING | CONFIRMED | DISMISSED */
     val status: String = "PENDING",
     val linkedTransactionId: Long? = null,
+    /**
+     * Matcher proposal, null when members simply co-occur. TRANSFER means a
+     * transfer pair was matched — confirm builds one TRANSFER, and the card
+     * renders source → destination. Purchases need no marker (default).
+     */
+    val suggestedKind: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

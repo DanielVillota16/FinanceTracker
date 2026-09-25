@@ -8,6 +8,7 @@ import doug.financetracker.data.local.entity.TransactionCandidateEntity
 import doug.financetracker.data.local.mapper.toDomain
 import doug.financetracker.data.local.mapper.toEntity
 import doug.financetracker.domain.correlation.CandidateMerger
+import doug.financetracker.domain.correlation.TransferMatcher
 import doug.financetracker.domain.model.ParsedStatus
 import doug.financetracker.domain.model.PendingItem
 import doug.financetracker.domain.model.SourceEvent
@@ -109,10 +110,10 @@ class IngestSourceMessage(
     }
 
     /**
-     * Purchase correlation: join an existing candidate when the evidence says
-     * "same physical purchase", else start a solo candidate. Order-independent
-     * — the second arrival joins the first either way. Weak evidence stays
-     * separate for the user. Must be called inside the ingest transaction.
+     * Matching, in order: purchase correlation first (same movement), then
+     * transfer matching (opposite legs of one internal movement). Either step
+     * is order-independent — the second arrival joins the first. Weak evidence
+     * stays separate for the user. Must be called inside the ingest transaction.
      */
     private suspend fun correlate(pendingId: Long, newItem: PendingItem) {
         val recent = db.pendingReviewDao().findRecentPending(CORRELATION_LOOKBACK)
@@ -121,12 +122,28 @@ class IngestSourceMessage(
                 val candidateId = row.review.candidateId ?: return@mapNotNull null
                 row.review.toDomain(row.source.toDomain()) to candidateId
             }
-        val candidateId = when (val merge = CandidateMerger.decide(recent, newItem)) {
-            is CandidateMerger.Decision.Join -> merge.candidateId
-            CandidateMerger.Decision.NewCandidate ->
-                db.transactionCandidateDao().insert(TransactionCandidateEntity())
+        when (val merge = CandidateMerger.decide(recent, newItem)) {
+            is CandidateMerger.Decision.Join -> {
+                db.pendingReviewDao().setCandidate(pendingId, merge.candidateId)
+                return
+            }
+            CandidateMerger.Decision.NewCandidate -> Unit // fall through to transfers
         }
-        db.pendingReviewDao().setCandidate(pendingId, candidateId)
+        val transferHit = TransferMatcher.findMatch(
+            recent, newItem, db.accountDao().getAll().map { it.toDomain() }
+        )?.takeIf { (candidateId, _) ->
+            // Only join solo candidates: folding a transfer leg into an
+            // already-correlated purchase group would corrupt it.
+            db.pendingReviewDao().getByCandidate(candidateId).size <= 1
+        }
+        if (transferHit != null) {
+            val (candidateId, _) = transferHit
+            db.transactionCandidateDao().markTransfer(candidateId, System.currentTimeMillis())
+            db.pendingReviewDao().setCandidate(pendingId, candidateId)
+        } else {
+            val candidateId = db.transactionCandidateDao().insert(TransactionCandidateEntity())
+            db.pendingReviewDao().setCandidate(pendingId, candidateId)
+        }
     }
 
     companion object {

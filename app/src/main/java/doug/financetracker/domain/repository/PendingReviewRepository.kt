@@ -12,4 +12,6 @@ interface PendingReviewRepository {
     suspend fun confirm(id: Long, linkedTransactionId: Long)
     suspend fun dismiss(id: Long)
     suspend fun dismissCandidate(candidateId: Long)
+    /** Full candidate (with members) owning a review, if any. */
+    suspend fun getCandidateForReview(reviewId: Long): PendingCandidate?
 }

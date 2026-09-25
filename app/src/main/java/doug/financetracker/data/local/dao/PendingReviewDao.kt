@@ -40,6 +40,10 @@ interface PendingReviewDao {
     @Query("SELECT * FROM pending_reviews WHERE candidateId = :candidateId")
     suspend fun getByCandidate(candidateId: Long): List<PendingReviewEntity>
 
+    @Transaction
+    @Query("SELECT * FROM pending_reviews WHERE candidateId = :candidateId")
+    suspend fun getMembersWithSource(candidateId: Long): List<PendingReviewWithSource>
+
     /** Confirm every member of a candidate against the same transaction. */
     @Query(
         "UPDATE pending_reviews SET status = 'CONFIRMED', linkedTransactionId = :transactionId, " +

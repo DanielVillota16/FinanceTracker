@@ -71,6 +71,8 @@ class ConfirmPendingItemTest {
         override suspend fun dismissCandidate(candidateId: Long) {
             dismissedCandidates += candidateId
         }
+        override suspend fun getCandidateForReview(reviewId: Long): doug.financetracker.domain.model.PendingCandidate? =
+            null
     }
 
     private fun pendingItem(
@@ -239,5 +241,53 @@ class ConfirmPendingItemTest {
         } catch (_: IllegalStateException) {
         }
         assertEquals(0, tx.created.size)
+    }
+
+    @Test
+    fun `transfer candidate confirms one transfer from both legs`() = runTest {
+        val outParsed = ParsedTransaction(
+            amountPesos = 100_000L, direction = Direction.OUTGOING,
+            transactionKind = TransactionKind.UNKNOWN,
+            possibleKinds = listOf(TransactionKind.TRANSFER, TransactionKind.EXPENSE),
+            institution = "Bancolombia",
+            sourceAccountHint = AccountHint("8494"), destinationAccountHint = null,
+            counterparty = null, timestampMillis = 8_000L,
+            reference = null, confidence = Confidence.MEDIUM
+        )
+        val inParsed = ParsedTransaction(
+            amountPesos = 100_000L, direction = Direction.INCOMING,
+            transactionKind = TransactionKind.INCOME,
+            possibleKinds = listOf(TransactionKind.INCOME), institution = "Nequi",
+            sourceAccountHint = null,
+            destinationAccountHint = AccountHint("", "Nequi"),
+            counterparty = "CARLOS RUIZ", timestampMillis = 8_100L,
+            reference = null, confidence = Confidence.HIGH
+        )
+        val outItem = pendingItem(id = 10L, parsed = outParsed)
+        val inItem = pendingItem(id = 11L, parsed = inParsed)
+        val candidate = doug.financetracker.domain.model.PendingCandidate(
+            id = 50L, members = listOf(outItem, inItem), primary = outItem,
+            suggestedKind = TransactionKind.TRANSFER
+        )
+        val tx = FakeTransactions()
+        val pending = FakePending(mutableMapOf(10L to outItem, 11L to inItem))
+        val candidateByReview = mapOf(10L to candidate, 11L to candidate)
+        val repo = object : PendingReviewRepository by pending {
+            override suspend fun getCandidateForReview(reviewId: Long) =
+                candidateByReview[reviewId]
+        }
+        val confirm = ConfirmPendingItem(
+            repo, tx, FakeAccounts(listOf(bancolombia, nequi, cash))
+        )
+        val txId = confirm.confirm(10L)
+        assertEquals(1L, txId)
+        val created = tx.created.single()
+        assertEquals(doug.financetracker.domain.model.TransactionType.TRANSFER, created.type)
+        assertEquals(100_000L, created.amount)
+        assertEquals(1L, created.sourceAccountId)
+        assertEquals(2L, created.destinationAccountId)
+        assertEquals(8_000L, created.dateTime)
+        // Primary confirm links the whole candidate.
+        assertEquals(listOf(10L to 1L), pending.confirmed)
     }
 }

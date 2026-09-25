@@ -42,6 +42,9 @@ class RoomPendingReviewRepository(
                     primary = selectPrimary(members),
                     status = runCatching { PendingStatus.valueOf(candidate.status) }
                         .getOrDefault(PendingStatus.PENDING),
+                    suggestedKind = candidate.suggestedKind?.let {
+                        runCatching { doug.financetracker.domain.parser.TransactionKind.valueOf(it) }.getOrNull()
+                    },
                     createdAt = candidate.createdAt
                 )
             }
@@ -50,6 +53,27 @@ class RoomPendingReviewRepository(
     override suspend fun getItem(id: Long): PendingItem? {
         val row = reviews.getWithSource(id) ?: return null
         return row.review.toDomain(row.source.toDomain())
+    }
+
+    override suspend fun getCandidateForReview(reviewId: Long): PendingCandidate? {
+        val row = reviews.getWithSource(reviewId) ?: return null
+        val candidateId = row.review.candidateId ?: return null
+        val candidate = candidates.getById(candidateId) ?: return null
+        val members = reviews.getMembersWithSource(candidateId)
+            .map { member -> member.review.toDomain(member.source.toDomain()) }
+            .sortedBy { it.createdAt }
+        if (members.isEmpty()) return null
+        return PendingCandidate(
+            id = candidate.id,
+            members = members,
+            primary = selectPrimary(members),
+            status = runCatching { PendingStatus.valueOf(candidate.status) }
+                .getOrDefault(PendingStatus.PENDING),
+            suggestedKind = candidate.suggestedKind?.let {
+                runCatching { doug.financetracker.domain.parser.TransactionKind.valueOf(it) }.getOrNull()
+            },
+            createdAt = candidate.createdAt
+        )
     }
 
     /**

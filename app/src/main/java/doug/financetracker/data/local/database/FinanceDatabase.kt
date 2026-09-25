@@ -30,7 +30,7 @@ import java.util.concurrent.Executors
         PendingReviewEntity::class,
         TransactionCandidateEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class FinanceDatabase : RoomDatabase() {
