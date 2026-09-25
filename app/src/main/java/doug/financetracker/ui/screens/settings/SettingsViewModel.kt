@@ -4,11 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import doug.financetracker.domain.model.Account
 import doug.financetracker.domain.model.Tag
+import android.Manifest
+import android.app.Application
 import android.content.Context
+import android.content.pm.PackageManager
 import doug.financetracker.domain.repository.AccountRepository
 import doug.financetracker.domain.repository.TagRepository
 import doug.financetracker.domain.usecase.IngestSourceMessage
 import doug.financetracker.service.notification.NotificationAccess
+import doug.financetracker.service.sms.SmsHistoryImporter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +27,7 @@ data class SettingsUiState(
 )
 
 class SettingsViewModel(
+    private val app: Application,
     private val accounts: AccountRepository,
     private val tags: TagRepository,
     private val ingest: IngestSourceMessage
@@ -92,5 +97,43 @@ class SettingsViewModel(
 
     fun refreshNotificationStatus(context: Context) {
         _notificationEnabled.value = NotificationAccess.isListenerEnabled(context)
+    }
+
+    // SMS sources (Phase 5) -------------------------------------------------
+
+    private val _smsGranted = MutableStateFlow(false)
+    val smsGranted: StateFlow<Boolean> = _smsGranted.asStateFlow()
+
+    fun refreshSmsPermission() {
+        _smsGranted.value = app.checkSelfPermission(Manifest.permission.READ_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    sealed interface SmsImportState {
+        data object Idle : SmsImportState
+        data object Running : SmsImportState
+        data class Done(val result: SmsHistoryImporter.Result) : SmsImportState
+    }
+
+    private val _smsImport = MutableStateFlow<SmsImportState>(SmsImportState.Idle)
+    val smsImport: StateFlow<SmsImportState> = _smsImport.asStateFlow()
+
+    /** Historical import over the same pipeline; safe to re-run (idempotent). */
+    fun runSmsImport(daysBack: Long?) {
+        if (_smsImport.value == SmsImportState.Running) return
+        viewModelScope.launch {
+            _smsImport.value = SmsImportState.Running
+            val result = try {
+                SmsHistoryImporter.importFromInbox(app, ingest, daysBack)
+            } catch (e: Exception) {
+                SmsHistoryImporter.Result(error = e.message ?: "Import failed.")
+            }
+            _smsImport.value = SmsImportState.Done(result)
+            refreshSmsPermission()
+        }
+    }
+
+    fun clearSmsImport() {
+        _smsImport.value = SmsImportState.Idle
     }
 }

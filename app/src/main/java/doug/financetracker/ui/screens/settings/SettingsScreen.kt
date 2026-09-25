@@ -24,6 +24,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import doug.financetracker.FinanceTrackerApp
 import doug.financetracker.domain.model.Account
 import doug.financetracker.service.notification.MonitoredPackages
 import doug.financetracker.service.notification.NotificationAccess
@@ -51,16 +54,24 @@ fun SettingsScreen(
     val vm: SettingsViewModel = viewModel(
         factory = vmFactory {
             val c = appContainer(context)
-            SettingsViewModel(c.accountRepository, c.tagRepository, c.ingestSourceMessage)
+            val app = context.applicationContext as FinanceTrackerApp
+            SettingsViewModel(app, c.accountRepository, c.tagRepository, c.ingestSourceMessage)
         }
     )
     val state by vm.state.collectAsStateWithLifecycle()
     val ingestResult by vm.ingestResult.collectAsStateWithLifecycle()
     val notificationEnabled by vm.notificationEnabled.collectAsStateWithLifecycle()
+    val smsGranted by vm.smsGranted.collectAsStateWithLifecycle()
+    val smsImport by vm.smsImport.collectAsStateWithLifecycle()
     var showAddAccount by remember { mutableStateOf(false) }
+
+    val smsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { vm.refreshSmsPermission() }
 
     LaunchedEffect(Unit) {
         vm.refreshNotificationStatus(context.applicationContext)
+        vm.refreshSmsPermission()
     }
 
     LazyColumn(
@@ -151,6 +162,17 @@ fun SettingsScreen(
             )
         }
         item {
+            SmsSourcesCard(
+                granted = smsGranted,
+                importState = smsImport,
+                onGrant = {
+                    smsPermissionLauncher.launch(android.Manifest.permission.READ_SMS)
+                },
+                onImport = { days -> vm.runSmsImport(days) },
+                onOpenPending = onOpenPending
+            )
+        }
+        item {
             IngestTestCard(
                 result = ingestResult,
                 onIngest = vm::ingestTestMessage,
@@ -169,6 +191,77 @@ fun SettingsScreen(
                 showAddAccount = false
             }
         )
+    }
+}
+
+@Composable
+private fun SmsSourcesCard(
+    granted: Boolean,
+    importState: SettingsViewModel.SmsImportState,
+    onGrant: () -> Unit,
+    onImport: (Long?) -> Unit,
+    onOpenPending: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("SMS sources", style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (granted) "SMS access granted — new bank messages are detected automatically."
+                else "Grant SMS access to detect bank messages and enable import.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (granted) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.error
+            )
+            Text(
+                "Only messages from recognized bank senders are processed; " +
+                    "everything else is ignored before any record exists.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (!granted) {
+                TextButton(onClick = onGrant) { Text("Grant SMS access") }
+            }
+            Text("Historical import (safe to re-run — duplicates are skipped)", style = MaterialTheme.typography.labelLarge)
+            val running = importState == SettingsViewModel.SmsImportState.Running
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    enabled = granted && !running,
+                    onClick = { onImport(7L) }
+                ) { Text("7 days") }
+                TextButton(
+                    enabled = granted && !running,
+                    onClick = { onImport(30L) }
+                ) { Text("30 days") }
+                TextButton(
+                    enabled = granted && !running,
+                    onClick = { onImport(90L) }
+                ) { Text("90 days") }
+                TextButton(
+                    enabled = granted && !running,
+                    onClick = { onImport(null) }
+                ) { Text("All") }
+            }
+            when (importState) {
+                SettingsViewModel.SmsImportState.Idle -> Unit
+                SettingsViewModel.SmsImportState.Running -> Text(
+                    "Importing…",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                is SettingsViewModel.SmsImportState.Done -> {
+                    val r = importState.result
+                    Text(
+                        if (r.error != null) r.error
+                        else "Examined ${r.examined} · ${r.created} new · " +
+                            "${r.duplicates} duplicates · ${r.unsupported} unsupported",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    TextButton(onClick = onOpenPending) { Text("View pending") }
+                }
+            }
+        }
     }
 }
 
