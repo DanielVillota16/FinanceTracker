@@ -55,7 +55,7 @@ fun SettingsScreen(
         factory = vmFactory {
             val c = appContainer(context)
             val app = context.applicationContext as FinanceTrackerApp
-            SettingsViewModel(app, c.accountRepository, c.tagRepository, c.ingestSourceMessage, c.authRepository, c.syncEngine)
+            SettingsViewModel(app, c.accountRepository, c.tagRepository, c.ingestSourceMessage, c.authRepository, c.syncEngine, c.smsSenderSettings)
         }
     )
     val state by vm.state.collectAsStateWithLifecycle()
@@ -67,6 +67,7 @@ fun SettingsScreen(
     val authBusy by vm.authBusy.collectAsStateWithLifecycle()
     val authError by vm.authError.collectAsStateWithLifecycle()
     val syncStatus by vm.syncStatus.collectAsStateWithLifecycle()
+    val extraSenders by vm.extraSenders.collectAsStateWithLifecycle()
     var showAddAccount by remember { mutableStateOf(false) }
 
     val smsPermissionLauncher = rememberLauncherForActivityResult(
@@ -190,6 +191,13 @@ fun SettingsScreen(
                 },
                 onImport = { days -> vm.runSmsImport(days) },
                 onOpenPending = onOpenPending
+            )
+        }
+        item {
+            ExtraSendersCard(
+                senders = extraSenders,
+                onAdd = vm::addExtraSender,
+                onRemove = vm::removeExtraSender
             )
         }
         item {
@@ -426,6 +434,58 @@ private fun SyncCard(
                 enabled = status != doug.financetracker.data.remote.supabase.SyncEngine.Status.Syncing,
                 onClick = onSyncNow
             ) { Text("Sync now") }
+        }
+    }
+}
+
+@Composable
+private fun ExtraSendersCard(
+    senders: Set<String>,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit
+) {
+    var draft by remember { mutableStateOf("") }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Extra SMS senders", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Recognized bank senders work out of the box. Add more here " +
+                    "(exact sender ID as shown in your messaging app) — same " +
+                    "fail-closed handling, stored only on this device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            senders.sorted().forEach { sender ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(sender, style = MaterialTheme.typography.bodyMedium)
+                    IconButton(onClick = { onRemove(sender) }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Remove $sender")
+                    }
+                }
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    label = { Text("Sender ID") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    enabled = draft.isNotBlank(),
+                    onClick = { onAdd(draft); draft = "" }
+                ) { Text("Add") }
+            }
         }
     }
 }

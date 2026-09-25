@@ -41,6 +41,17 @@ class SmsIngestionTest {
     }
 
     @Test
+    fun `user extras extend the gate with the same fail-closed semantics`() {
+        assertTrue(SupportedSmsSenders.isSupported("MiBanco", setOf("mibanco")))
+        assertTrue(SupportedSmsSenders.isSupported("MIBANCO Alertas", setOf("mibanco")))
+        assertFalse(SupportedSmsSenders.isSupported("MiBanco", emptySet()))
+        assertFalse(SupportedSmsSenders.isSupported("Other", setOf("mibanco")))
+        assertFalse(SupportedSmsSenders.isSupported("Other", setOf("  ")))
+        // Verified list is unaffected by extras.
+        assertTrue(SupportedSmsSenders.isSupported("85540", setOf("mibanco")))
+    }
+
+    @Test
     fun `import loop gates senders and tallies outcomes`() = runTest {
         val rows = listOf(
             SmsHistoryImporter.SmsRow("Bancolombia", "Compraste \$5", 1000L),

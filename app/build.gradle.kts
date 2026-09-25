@@ -77,6 +77,7 @@ dependencies {
     implementation(libs.supabase.postgrest.kt)
     // Ktor engine required by supabase-kt (OkHttp is the Android engine).
     implementation(libs.ktor.client.okhttp)
+    implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

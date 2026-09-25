@@ -2,6 +2,7 @@ package doug.financetracker
 
 import android.app.Application
 import doug.financetracker.data.local.database.FinanceDatabase
+import doug.financetracker.data.local.preferences.SmsSenderSettings
 import doug.financetracker.data.remote.supabase.AuthRepository
 import doug.financetracker.data.remote.supabase.SupabaseProvider
 import doug.financetracker.data.remote.supabase.SyncEngine
@@ -45,6 +46,7 @@ class AppContainer(app: Application) {
     val supabaseProvider = SupabaseProvider()
     val authRepository = AuthRepository(supabaseProvider)
     val syncEngine = SyncEngine(db, supabaseProvider, authRepository)
+    val smsSenderSettings = SmsSenderSettings.create(app)
 
     val observeTransactionDetails = ObserveTransactionDetails(transactionRepository)
     val createTransaction = CreateTransaction(transactionRepository)

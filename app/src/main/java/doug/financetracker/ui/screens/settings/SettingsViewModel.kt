@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -32,7 +33,8 @@ class SettingsViewModel(
     private val tags: TagRepository,
     private val ingest: IngestSourceMessage,
     private val auth: doug.financetracker.data.remote.supabase.AuthRepository,
-    private val sync: doug.financetracker.data.remote.supabase.SyncEngine
+    private val sync: doug.financetracker.data.remote.supabase.SyncEngine,
+    private val senders: doug.financetracker.data.local.preferences.SmsSenderSettings
 ) : ViewModel() {
 
     val state: StateFlow<SettingsUiState> = combine(
@@ -126,7 +128,8 @@ class SettingsViewModel(
         viewModelScope.launch {
             _smsImport.value = SmsImportState.Running
             val result = try {
-                SmsHistoryImporter.importFromInbox(app, ingest, daysBack)
+                val extras = senders.observeExtraSenders().first()
+                SmsHistoryImporter.importFromInbox(app, ingest, daysBack, extras)
             } catch (e: Exception) {
                 SmsHistoryImporter.Result(error = e.message ?: "Import failed.")
             }
@@ -137,6 +140,19 @@ class SettingsViewModel(
 
     fun clearSmsImport() {
         _smsImport.value = SmsImportState.Idle
+    }
+
+    // Extra SMS senders (user-managed allowlist additions) --------------------
+
+    val extraSenders: StateFlow<Set<String>> = senders.observeExtraSenders()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    fun addExtraSender(value: String) {
+        viewModelScope.launch { senders.addSender(value) }
+    }
+
+    fun removeExtraSender(value: String) {
+        viewModelScope.launch { senders.removeSender(value) }
     }
 
     // Supabase auth (Phase 7) ------------------------------------------------

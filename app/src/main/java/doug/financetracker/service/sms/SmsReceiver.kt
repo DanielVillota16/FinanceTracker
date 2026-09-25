@@ -8,6 +8,7 @@ import doug.financetracker.FinanceTrackerApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -30,7 +31,6 @@ class SmsReceiver : BroadcastReceiver() {
         val sender = messages.firstNotNullOfOrNull { it.originatingAddress }?.trim().orEmpty()
         val body = messages.mapNotNull { it.messageBody }.joinToString("")
         if (sender.isEmpty() || body.isBlank()) return
-        if (!SupportedSmsSenders.isSupported(sender)) return
         val eventTime = messages.firstOrNull()?.timestampMillis
             ?: System.currentTimeMillis()
 
@@ -38,7 +38,16 @@ class SmsReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val container = (context.applicationContext as? FinanceTrackerApp)?.container
-                container?.ingestSourceMessage(
+                    ?: return@launch
+                // Verified list first (pure, no I/O); the user's own extra
+                // senders live in DataStore and need one suspending read.
+                val allowed = SupportedSmsSenders.isSupported(sender) ||
+                    SupportedSmsSenders.isSupported(
+                        sender,
+                        container.smsSenderSettings.observeExtraSenders().first()
+                    )
+                if (!allowed) return@launch
+                container.ingestSourceMessage(
                     sourceType = "SMS",
                     sourceIdentifier = sender,
                     rawContent = body,

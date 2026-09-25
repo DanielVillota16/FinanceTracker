@@ -30,11 +30,19 @@ object SupportedSmsSenders {
         "85540" to "Bancolombia" // Bancolombia alert SMS, verified on-device
     )
 
-    fun isSupported(sender: String): Boolean {
+    fun isSupported(sender: String): Boolean = isSupported(sender, emptySet())
+
+    /**
+     * Verified list plus the user's own [extraSenders] (raw values as typed
+     * in Settings; matched case-insensitively, same fail-closed semantics).
+     */
+    fun isSupported(sender: String, extraSenders: Set<String>): Boolean {
         val normalized = sender.trim().lowercase()
         if (normalized.isEmpty()) return false
         if (MARKERS.any { it in normalized }) return true
-        return normalized.filter { it.isDigit() } in NUMERIC_CODES
+        if (normalized.filter { it.isDigit() } in NUMERIC_CODES) return true
+        val extras = extraSenders.map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        return extras.any { it in normalized }
     }
 
     /** Human label for a supported numeric code, for diagnostics. */

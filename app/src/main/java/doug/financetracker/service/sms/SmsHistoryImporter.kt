@@ -34,6 +34,7 @@ object SmsHistoryImporter {
         context: Context,
         ingest: IngestSourceMessage,
         daysBack: Long?,
+        extraSenders: Set<String> = emptySet(),
         now: Long = System.currentTimeMillis()
     ): Result = withContext(Dispatchers.IO) {
         if (context.checkSelfPermission(Manifest.permission.READ_SMS) !=
@@ -44,7 +45,7 @@ object SmsHistoryImporter {
         val rows = readInbox(context, daysBack, now) ?: return@withContext Result(
             error = "Could not read the SMS inbox."
         )
-        importRows(rows, now) { row ->
+        importRows(rows, now, isSupported = { SupportedSmsSenders.isSupported(it, extraSenders) }) { row ->
             ingest(
                 sourceType = "SMS",
                 sourceIdentifier = row.sender,
@@ -93,6 +94,7 @@ object SmsHistoryImporter {
     suspend fun importRows(
         rows: List<SmsRow>,
         now: Long,
+        isSupported: (String) -> Boolean = SupportedSmsSenders::isSupported,
         ingest: suspend (SmsRow) -> IngestSourceMessage.Result
     ): Result {
         var created = 0
@@ -105,7 +107,7 @@ object SmsHistoryImporter {
                 skippedBlank++
                 continue
             }
-            if (!SupportedSmsSenders.isSupported(row.sender)) {
+            if (!isSupported(row.sender)) {
                 skippedSenders++
                 continue
             }
