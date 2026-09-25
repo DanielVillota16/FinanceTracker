@@ -296,7 +296,8 @@ private fun SmsSourcesCard(
                     Text(
                         if (r.error != null) r.error
                         else "Examined ${r.examined} · ${r.created} new · " +
-                            "${r.duplicates} duplicates · ${r.unsupported} unsupported",
+                            "${r.duplicates} duplicates · ${r.unsupported} unsupported · " +
+                            "${r.skippedSenders} from other senders",
                         style = MaterialTheme.typography.bodySmall
                     )
                     TextButton(onClick = onOpenPending) { Text("View pending") }
